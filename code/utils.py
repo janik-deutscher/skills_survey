@@ -146,7 +146,7 @@ def save_survey_data_to_gsheet(username, survey_responses):
         gc = gspread.authorize(creds)
 
         # !!! IMPORTANT: CHANGE THIS TO YOUR ACTUAL GOOGLE SHEET NAME !!!
-        sheet_name = "YOUR ACTUAL SHEET NAME HERE"
+        sheet_name = "pilot_survey_results"
         # !!! IMPORTANT: CHANGE THIS TO YOUR ACTUAL GOOGLE SHEET NAME !!!
 
         worksheet = gc.open(sheet_name).sheet1
