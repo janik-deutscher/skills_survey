@@ -36,11 +36,8 @@ Interview Flow:
 6.  **Summary and Evaluation:**
     *   Provide a concise summary (2-3 key takeaways) focusing on their view of important skills, AI's role, and link to course choice.
     *   Add the text: "To conclude, how well does this brief summary capture our discussion about your perspectives: 1 (poorly), 2 (partially), 3 (well), 4 (very well). Please only reply with the associated number."
-
-7. **Covariates of the respondent:**
-    * Ask them in several questions, one by one, about their age, their major, which uni year they are in (first, second, third or fourth), their current GPA across all subjects, and how much they use AI. Ask gently for their GPA.    
     
-8.  **Closing:**
+7.  **Closing:**
     *   After receiving their final response on AI use, use the designated closing code 'x7y8'.
 
 Do not number your questions when asking them. Use follow-up questions naturally to clarify or deepen understanding when needed, but keep the overall interview focused and moving forward to respect the respondent's time.
@@ -89,16 +86,34 @@ MODEL = "gpt-4o-2024-05-13"
 TEMPERATURE = None
 MAX_OUTPUT_TOKENS = 2048
 
-# Display login screen (Keep As Is)
-LOGINS = False
+# Display login screen (Set based on your need)
+LOGINS = False # Keep False if you don't want login, True if you do
 
-# Directories (Keep As Is)
-TRANSCRIPTS_DIRECTORY = "../data/transcripts/"
-TIMES_DIRECTORY = "../data/times/"
-BACKUPS_DIRECTORY = "../data/backups/"
+# --- Recommended Directory Paths ---
+# Store data within a 'data' folder inside your app's main directory
+DATA_BASE_DIR = "data" # Base directory relative to your app script
+TRANSCRIPTS_DIRECTORY = f"{DATA_BASE_DIR}/transcripts/"
+TIMES_DIRECTORY = f"{DATA_BASE_DIR}/times/"
+BACKUPS_DIRECTORY = f"{DATA_BASE_DIR}/backups/"
+SURVEY_DIRECTORY = f"{DATA_BASE_DIR}/survey/" # *** NEW: Directory for survey data ***
+
+# --- Alternative: Keep your original ../data structure (use if preferred) ---
+# DATA_BASE_DIR = "../data"
+# TRANSCRIPTS_DIRECTORY = f"{DATA_BASE_DIR}/transcripts/"
+# TIMES_DIRECTORY = f"{DATA_BASE_DIR}/times/"
+# BACKUPS_DIRECTORY = f"{DATA_BASE_DIR}/backups/"
+# SURVEY_DIRECTORY = f"{DATA_BASE_DIR}/survey/" # *** NEW: Needs to be added ***
 
 # Avatars displayed (Keep As Is)
 AVATAR_INTERVIEWER = "\U0001F393"
 AVATAR_RESPONDENT = "\U0001F9D1\U0000200D\U0001F4BB"
 
+# --- Create directories at startup (optional but good practice) ---
+import os
+if not os.path.exists(TRANSCRIPTS_DIRECTORY): os.makedirs(TRANSCRIPTS_DIRECTORY)
+if not os.path.exists(TIMES_DIRECTORY): os.makedirs(TIMES_DIRECTORY)
+if not os.path.exists(BACKUPS_DIRECTORY): os.makedirs(BACKUPS_DIRECTORY)
+if not os.path.exists(SURVEY_DIRECTORY): os.makedirs(SURVEY_DIRECTORY)
+# Note: You might prefer putting this os.makedirs logic in your main script (1_Interview.py)
+# after login checks, as done in the previous answer. That's cleaner.
 
