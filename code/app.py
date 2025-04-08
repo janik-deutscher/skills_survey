@@ -22,7 +22,7 @@ SURVEY_STAGE = "survey"
 COMPLETED_STAGE = "completed"
 
 # --- API Setup ---
-# (Keep your existing API setup block)
+# (Make sure this matches your model and secrets setup)
 if "gpt" in config.MODEL.lower():
     api = "openai"; from openai import OpenAI
     try: client = OpenAI(api_key=st.secrets["API_KEY_OPENAI"])
@@ -43,32 +43,29 @@ st.set_page_config(page_title="Skills & AI Interview", page_icon=config.AVATAR_I
 query_params = st.query_params.to_dict()
 test_user_requested = query_params.get("username", [""])[0] == "testaccount"
 
-# Initialize username and welcome flag if they don't exist
-if "username" not in st.session_state:
-    st.session_state.username = None # Ensure it exists even if None initially
-if "welcome_shown" not in st.session_state:
-     st.session_state.welcome_shown = False
+# Initialize states if they don't exist
+if "username" not in st.session_state: st.session_state.username = None
+if "welcome_shown" not in st.session_state: st.session_state.welcome_shown = False
+if "consent_given" not in st.session_state: st.session_state.consent_given = False
 
-# Assign or generate username only if it hasn't been set yet in this session
+# Assign or generate username only if it hasn't been set yet
 if st.session_state.username is None:
     if test_user_requested:
         st.session_state.username = "testaccount"; st.session_state.is_test_account = True
-        print("INFO: Using 'testaccount' via query param.")
-        st.rerun() # Rerun once after setting username
+        print("INFO: Using 'testaccount' via query param."); st.rerun()
     elif config.LOGINS:
-         # Add Login logic here if needed, setting st.session_state.username
+         # Placeholder: Implement actual login if needed
          st.warning("Login configured but using UUID fallback."); st.session_state.username = f"user_{uuid.uuid4()}"; st.session_state.is_test_account = False
-         st.rerun() # Rerun once after setting username
+         st.rerun()
     else: # No logins, no test param
         st.session_state.username = f"user_{uuid.uuid4()}"; st.session_state.is_test_account = False
-        print(f"INFO: Generated new user UUID: {st.session_state.username}")
-        st.rerun() # Rerun once after setting username
+        print(f"INFO: Generated new user UUID: {st.session_state.username}"); st.rerun()
 
-# Retrieve username for use (should exist now)
+# Retrieve username for use
 username = st.session_state.username
 is_test_account = st.session_state.get("is_test_account", False)
 
-# --- Directory Creation (Only if username is set) ---
+# --- Directory Creation ---
 if username:
     try:
         os.makedirs(config.TRANSCRIPTS_DIRECTORY, exist_ok=True); os.makedirs(config.TIMES_DIRECTORY, exist_ok=True)
@@ -80,7 +77,6 @@ if username:
 def initialize_session_state():
     if "username" in st.session_state and st.session_state.username:
         if "current_stage" not in st.session_state: st.session_state.current_stage = None
-        # Initialize other states only if not already set
         if "messages" not in st.session_state: st.session_state.messages = []
         if "start_time" not in st.session_state: st.session_state.start_time = None
         if "start_time_file_names" not in st.session_state: st.session_state.start_time_file_names = None
@@ -91,7 +87,6 @@ initialize_session_state()
 
 
 # --- Determine Current Stage Based on Completion Checks ---
-# Determine stage only if username is set and welcome has been shown (or completion overrides welcome)
 current_stage = None
 if username:
     survey_done = check_if_survey_completed(username)
@@ -99,10 +94,10 @@ if username:
 
     if survey_done:
         current_stage = COMPLETED_STAGE
-        st.session_state.welcome_shown = True # If completed, welcome is implicitly done
-    elif not st.session_state.welcome_shown: # Check if welcome needs to be shown
+        st.session_state.welcome_shown = True # Mark welcome done if survey done
+    elif not st.session_state.welcome_shown:
          current_stage = WELCOME_STAGE
-    else: # Welcome shown, survey not done -> check interview
+    else: # Welcome shown, survey not done
         interview_done = check_if_interview_completed(username)
         st.session_state.interview_completed_flag = interview_done
         if interview_done:
@@ -118,7 +113,8 @@ if current_stage:
 
 # --- Section 0: Welcome Stage ---
 if st.session_state.get("current_stage") == WELCOME_STAGE:
-    st.title("Welcome!")
+    st.title("Welcome & Consent")
+
     st.markdown("""
     Hi there, and thanks for participating in this research project!
 
@@ -128,28 +124,52 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     This involves two short parts:
     1.  A brief **interview** with an AI assistant (around 10-15 minutes).
     2.  A quick **survey** with some follow-up questions.
-
-    Your anonymous responses are valuable and will contribute to PhD research.
-    Please answer thoughtfully and honestly.
-
-    Click the button below when you're ready to begin the interview.
     """)
 
-    if st.button("Start Interview", key="start_interview_btn"):
-        st.session_state.welcome_shown = True
-        st.session_state.current_stage = INTERVIEW_STAGE # Explicitly set next stage
-        st.rerun() # Rerun to move to the interview stage
+    st.markdown("---") # Separator
+
+    # --- Data Protection Information ---
+    # !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL GDPR/ETHICS TEXT !!!
+    st.subheader("Data Protection & Consent")
+    st.markdown("""
+    **Please read the following information carefully:**
+
+    *   **Purpose:** The data collected (interview transcript and survey answers) will be used solely for PhD research purposes related to understanding skill perceptions and AI influence.
+    *   **Anonymity:** Your responses will be anonymized. The unique ID generated for this session is not linked to your personal identity. Any potentially identifying information mentioned during the interview will be removed or pseudonymized during analysis. Your name or email address is not collected.
+    *   **Data Storage:** Anonymized data will be stored securely on [Describe storage location - e.g., university servers, encrypted hard drive] and may be archived according to [Your University/Funder]'s data management policy.
+    *   **Withdrawal:** You can stop the interview at any time using the "Quit" button. You can choose not to answer any question in the survey. Once submitted, removing your specific anonymized data may be difficult, but you can contact [Your Name/Email Address] with your session UserID (if known) if you have concerns.
+    *   **Contact:** If you have questions about this study or your rights, please contact [Your Name/Email Address] or the [Your University Ethics Committee Contact Info].
+
+    *(Please replace the bracketed text above with your specific details approved by your ethics committee).*
+    """)
+
+    # --- Consent Checkbox ---
+    consent = st.checkbox("I confirm that I have read and understood the information above, I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.consent_given) # Reflect current state
+
+    # Store consent checkbox state immediately
+    st.session_state.consent_given = consent
+
+    # --- Start Button (Disabled until consent is given) ---
+    if st.button("Start Interview", key="start_interview_btn", disabled=not st.session_state.consent_given):
+        if st.session_state.consent_given: # Double check state just before proceeding
+            st.session_state.welcome_shown = True
+            st.session_state.current_stage = INTERVIEW_STAGE # Explicitly set next stage
+            st.rerun()
+    elif not st.session_state.consent_given:
+        # This message will show if the button is visible but disabled (it shouldn't be due to 'disabled' arg, but safe fallback)
+        # A better approach is implied feedback: the button is simply unclickable until box is checked.
+        # st.warning("Please check the consent box above to proceed.")
+        pass
+
 
 # --- Section 1: Interview Stage ---
 elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
     st.title("Part 1: Interview")
-    # --- Start of Interview Logic ---
     st.session_state.interview_active = True
-    if st.session_state.start_time is None: # Init time only when entering interview stage
-        st.session_state.start_time = time.time()
-        st.session_state.start_time_file_names = time.strftime("%Y%m%d_%H%M%S", time.localtime(st.session_state.start_time))
+    if st.session_state.start_time is None:
+        st.session_state.start_time = time.time(); st.session_state.start_time_file_names = time.strftime("%Y%m%d_%H%M%S", time.localtime(st.session_state.start_time))
     st.info("Please answer the interviewer's questions.")
-    if st.button("Quit Interview Early", key="quit_interview"): # Removed help text for cleaner look
+    if st.button("Quit Interview Early", key="quit_interview"):
         st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
         quit_message = "You have chosen to end the interview early. Proceeding to the final questions."
         if st.session_state.messages: st.session_state.messages.append({"role": "assistant", "content": quit_message})
@@ -169,7 +189,6 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
         try:
             if api == "openai": st.session_state.messages.append({"role": "system", "content": config.SYSTEM_PROMPT})
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-                # ... (rest of initial message logic - no changes needed) ...
                 message_placeholder = st.empty(); message_interviewer = ""
                 api_kwargs = { "model": config.MODEL, "messages": st.session_state.messages, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": True }
                 if api == "anthropic":
@@ -195,7 +214,6 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
         with st.chat_message("user", avatar=config.AVATAR_RESPONDENT): st.markdown(prompt)
         try:
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-                # ... (rest of chat interaction logic - no changes needed) ...
                  message_placeholder = st.empty(); message_interviewer = ""; full_response_content = ""
                  api_kwargs = { "model": config.MODEL, "messages": st.session_state.messages, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": True }
                  if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT
@@ -204,22 +222,22 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                  # Streaming and code detection logic
                  if api == "openai":
                     stream = client.chat.completions.create(**api_kwargs)
-                    for chunk in stream: # ... (code detection logic) ...
+                    for chunk in stream:
                          text_delta = chunk.choices[0].delta.content
                          if text_delta:
                              full_response_content += text_delta
                              for code in config.CLOSING_MESSAGES.keys():
-                                 if code == full_response_content.strip(): detected_code = code; message_interviewer = full_response_content.replace(code, "").strip(); stream.close(); stream_closed = True; break
+                                 if code == full_response_content.strip(): detected_code = code; message_interviewer = full_response_content.replace(code, "").strip(); # ... (placeholder/close handling) ...; stream.close(); stream_closed = True; break
                              if stream_closed: break
                              message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
                     if not stream_closed: message_placeholder.markdown(message_interviewer)
                  elif api == "anthropic":
                      with client.messages.stream(**api_kwargs) as stream:
-                        for text_delta in stream.text_stream: # ... (code detection logic) ...
+                        for text_delta in stream.text_stream:
                              if text_delta is not None:
                                  full_response_content += text_delta
                                  for code in config.CLOSING_MESSAGES.keys():
-                                     if code == full_response_content.strip(): detected_code = code; message_interviewer = full_response_content.replace(code,"").strip(); stream_closed = True; break
+                                     if code == full_response_content.strip(): detected_code = code; message_interviewer = full_response_content.replace(code,"").strip(); # ... (placeholder handling) ...; stream_closed = True; break
                                  if stream_closed: break
                                  message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
                      if not stream_closed: message_placeholder.markdown(message_interviewer)
@@ -239,32 +257,27 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                      except Exception as backup_e: print(f"Warning: Backup failed - {backup_e}")
         except Exception as e: st.error(f"An error occurred during the interview chat: {e}")
 
+
 # --- Section 2: Survey Stage ---
 elif st.session_state.get("current_stage") == SURVEY_STAGE:
     st.title("Part 2: Survey")
     st.info(f"Thank you {username}, please answer a few final questions.")
-    # --- Start of Survey Logic ---
-    # (Keep the entire Survey Definition and Form block - no changes needed)
-    age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]
-    gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]
-    major_options = ["Select...", "Computer Science", "Engineering (Other)", "Business", "Humanities", "Social Sciences", "Natural Sciences", "Arts", "Health Sciences", "Other", "Not Applicable"]
-    year_options = ["Select...", "1st Year Undergraduate", "2nd Year Undergraduate", "3rd Year Undergraduate", "4th+ Year Undergraduate", "Graduate Student", "Postgraduate/Doctoral", "Not a Student"]
-    gpa_values = np.round(np.arange(5.0, 10.01, 0.1), 1); gpa_options = ["Select...", "Below 5.0"] + [f"{gpa:.1f}" for gpa in gpa_values] + ["Prefer not to say / Not applicable"]
-    ai_freq_options = ["Select...", "Frequently (Daily/Weekly)", "Occasionally (Monthly)", "Rarely (Few times a year)", "Never", "Unsure"]
+    # Survey options definitions
+    age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]; gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]; major_options = ["Select...", "Computer Science", "Engineering (Other)", "Business", "Humanities", "Social Sciences", "Natural Sciences", "Arts", "Health Sciences", "Other", "Not Applicable"]; year_options = ["Select...", "1st Year Undergraduate", "2nd Year Undergraduate", "3rd Year Undergraduate", "4th+ Year Undergraduate", "Graduate Student", "Postgraduate/Doctoral", "Not a Student"]; gpa_values = np.round(np.arange(5.0, 10.01, 0.1), 1); gpa_options = ["Select...", "Below 5.0"] + [f"{gpa:.1f}" for gpa in gpa_values] + ["Prefer not to say / Not applicable"]; ai_freq_options = ["Select...", "Frequently (Daily/Weekly)", "Occasionally (Monthly)", "Rarely (Few times a year)", "Never", "Unsure"]
 
+    # Survey form
     with st.form("survey_form"):
-        st.subheader("Demographic Information"); age = st.selectbox("Age?", age_options, key="age"); gender = st.selectbox("Gender?", gender_options, key="gender")
-        major = st.selectbox("Major/Field?", major_options, key="major"); year_of_study = st.selectbox("Year?", year_options, key="year")
-        gpa = st.selectbox("GPA?", gpa_options, key="gpa")
-        st.subheader("AI Usage"); ai_frequency = st.selectbox("AI Use Frequency?", ai_freq_options, key="ai_frequency")
-        ai_model = st.text_input("AI Model(s) Used?", key="ai_model")
+        st.subheader("Demographic Information"); age = st.selectbox("Age?", age_options, key="age"); gender = st.selectbox("Gender?", gender_options, key="gender"); major = st.selectbox("Major/Field?", major_options, key="major"); year_of_study = st.selectbox("Year?", year_options, key="year"); gpa = st.selectbox("GPA?", gpa_options, key="gpa")
+        st.subheader("AI Usage"); ai_frequency = st.selectbox("AI Use Frequency?", ai_freq_options, key="ai_frequency"); ai_model = st.text_input("AI Model(s) Used?", key="ai_model")
         submitted = st.form_submit_button("Submit Survey Responses")
 
+    # Form submission handling
     if submitted:
         if (age == "Select..." or gender == "Select..." or major == "Select..." or year_of_study == "Select..." or gpa == "Select..." or ai_frequency == "Select..."):
             st.warning("Please answer all dropdown questions.")
         else:
             survey_responses = {"age": age, "gender": gender, "major": major, "year": year_of_study, "gpa": gpa, "ai_frequency": ai_frequency, "ai_model": ai_model}
+            # Consent status was already stored in session_state in the Welcome stage
             save_successful = save_survey_data(username, survey_responses)
             if save_successful:
                 st.session_state.survey_completed_flag = True; st.session_state.current_stage = COMPLETED_STAGE
@@ -279,9 +292,8 @@ elif st.session_state.get("current_stage") == COMPLETED_STAGE:
 
 # --- Fallback ---
 else:
-    # This might show briefly during initial reruns if state isn't set fast enough
+    # Handles state where username might be set but stage isn't determined yet (e.g., during initial reruns)
     st.spinner("Loading application state...")
-    # If it persists, there might be an issue in stage determination logic
-    print(f"Info: Reached fallback state. Username: {username}, Stage: {st.session_state.get('current_stage')}")
-    time.sleep(0.5) # Give a bit more time
-    st.rerun() # Try one more rerun
+    print(f"Info: Fallback state. User: {username}, Stage: {st.session_state.get('current_stage')}, Welcome: {st.session_state.get('welcome_shown')}")
+    time.sleep(0.5) # Give a bit more time for state to sync
+    st.rerun()
