@@ -118,12 +118,12 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     st.markdown("""
     Hi there, and thanks for participating in this research project!
 
-    We're exploring university students' and recent graduates' perspectives on valuable job skills,
+    I'm Janik's AI assistant helping him in his PhD project exploring university students' perspectives on valuable job skills,
     the influence of Artificial Intelligence (AI), and how these thoughts relate to educational choices.
 
     This involves two short parts:
     1.  A brief **interview** with an AI assistant (around 10-15 minutes).
-    2.  A quick **survey** with some follow-up questions.
+    2.  A quick **survey** with some basic questions about you and your study background.
     """)
 
     st.markdown("---") # Separator
@@ -136,11 +136,10 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 
     *   **Purpose:** The data collected (interview transcript and survey answers) will be used solely for PhD research purposes related to understanding skill perceptions and AI influence.
     *   **Anonymity:** Your responses will be anonymized. The unique ID generated for this session is not linked to your personal identity. Any potentially identifying information mentioned during the interview will be removed or pseudonymized during analysis. Your name or email address is not collected.
-    *   **Data Storage:** Anonymized data will be stored securely on [Describe storage location - e.g., university servers, encrypted hard drive] and may be archived according to [Your University/Funder]'s data management policy.
+    *   **Data Storage:** Anonymized data will be stored securely.
     *   **Withdrawal:** You can stop the interview at any time using the "Quit" button. You can choose not to answer any question in the survey. Once submitted, removing your specific anonymized data may be difficult, but you can contact [Your Name/Email Address] with your session UserID (if known) if you have concerns.
-    *   **Contact:** If you have questions about this study or your rights, please contact [Your Name/Email Address] or the [Your University Ethics Committee Contact Info].
+    *   **Contact:** If you have questions about this study or your rights, please contact Janik Deutscher (janik.deutscher@upf.edu) or the UPF's Ethics Committee.
 
-    *(Please replace the bracketed text above with your specific details approved by your ethics committee).*
     """)
 
     # --- Consent Checkbox ---
