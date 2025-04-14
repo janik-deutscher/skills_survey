@@ -113,37 +113,77 @@ if current_stage:
 
 # --- Section 0: Welcome Stage ---
 if st.session_state.get("current_stage") == WELCOME_STAGE:
-    st.title("Welcome & Consent")
+    st.title("Welcome")
 
-    st.markdown("""
-    Hi there, and thanks for participating in this research project!
+    # --- REVISED INTRO TEXT ---
+    st.markdown(f"""
+    Hi there, thanks for your interest in this research project!
 
-    I'm Janik's AI assistant helping him in his PhD project exploring university students' perspectives on valuable job skills,
-    the influence of Artificial Intelligence (AI), and how these thoughts relate to educational choices.
+    My name is Janik Deutscher, and I'm a PhD Candidate at UPF. For my research, I'm exploring how university students like you think about valuable skills for the future, the role of Artificial Intelligence (AI), and how these views connect to educational choices.
 
-    This involves two short parts:
-    1.  A brief **interview** with an AI assistant (around 10-15 minutes).
-    2.  A quick **survey** with some basic questions about you and your study background.
+    To understand your perspective, this study involves an **interview conducted by an AI assistant** followed by a short survey.
+
+    Before we begin, please carefully read the **Information Sheet & Consent Form** below.
     """)
+    # --- END REVISED INTRO TEXT ---
 
     st.markdown("---") # Separator
 
-    # --- Data Protection Information ---
-    # !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL GDPR/ETHICS TEXT !!!
-    st.subheader("Data Protection & Consent")
+    # --- REVISED DATA PROTECTION INFO with MARKDOWN BULLETS ---
+    st.subheader("Information Sheet & Consent Form")
     st.markdown("""
-    **Please read the following information carefully:**
+**Study Title:** Student Perspectives on Skills, Careers, and Artificial Intelligence \n
+**Researcher:** Janik Deutscher (janik.deutscher@upf.edu), PhD Candidate, Universitat Pompeu Fabra
 
-    *   **Purpose:** The data collected (interview transcript and survey answers) will be used solely for PhD research purposes related to understanding skill perceptions and AI influence.
-    *   **Anonymity:** Your responses will be anonymized. The unique ID generated for this session is not linked to your personal identity. Any potentially identifying information mentioned during the interview will be removed or pseudonymized during analysis. Your name or email address is not collected.
-    *   **Data Storage:** Anonymized data will be stored securely.
-    *   **Withdrawal:** You can stop the interview at any time using the "Quit" button. You can choose not to answer any question in the survey. Once submitted, removing your specific anonymized data may be difficult, but you can contact [Your Name/Email Address] with your session UserID (if known) if you have concerns.
-    *   **Contact:** If you have questions about this study or your rights, please contact Janik Deutscher (janik.deutscher@upf.edu) or the UPF's Ethics Committee.
+**Please read the following information carefully before deciding to participate:**
 
+**1. Purpose of the Research:**
+*   This study is part of a PhD research project aiming to understand how university students perceive valuable skills for their future careers, how the rise of Artificial Intelligence (AI) might influence these views, and how this connects to educational choices.
+
+**2. What Participation Involves:**
+*   If you agree to participate, you will engage in:
+    *   An interview conducted via text chat with an **AI assistant**. The AI will ask you open-ended questions about your career aspirations, skill perceptions, educational choices, and views on AI.
+    *   A **short survey** following the interview with some additional questions.
+*   The estimated total time commitment is approximately **30-40 minutes**.
+
+**3. Privacy, Anonymity, and API Usage:**
+*   Your privacy is protected. No directly identifiable information (like your name, email, or address) will be collected.
+*   **AI Interview Data Handling:** To enable the AI assistant to converse with you, your typed responses during the interview will be sent via a secure Application Programming Interface (API) to the AI service provider (OpenAI, for the GPT model used in this study). This is done solely to generate the AI's replies in real-time.
+*   **Data Use by AI Provider:** Based on the current policies of major AI providers like OpenAI for API usage, data submitted through the API is **not used to train their AI models**.
+*   **Research Data:** The research team only receives the interview transcript (your responses and the AI's questions). During data analysis, this transcript and your survey answers will be linked to a **numerical code**, not to any other identifier.
+*   **Anonymization:** Any potentially identifying details mentioned during the interview (e.g., specific names, unique places) will be **removed or pseudonymized** in the transcripts before analysis or publication.
+
+**4. Data Storage and Use:**
+*   Anonymized research data (transcripts and survey responses linked to numerical codes) will be stored securely on UPF servers.
+*   Data will be kept for the duration of the PhD project and up to two years after its finalization for scientific validation, according to UPF regulations.
+*   Anonymized data may be reused for other related research projects or archived/published in a public repository in the future.
+
+**5. Voluntary Participation and Withdrawal:**
+*   Your participation is entirely **voluntary**.
+*   You can **stop the interview at any time** without penalty by using the "Quit" button.
+*   You may choose **not to answer any specific question** in the survey.
+*   Once your data is submitted and anonymized, removing your specific responses may be difficult. However, if you have concerns after participation, you can contact Janik Deutscher (janik.deutscher@upf.edu) with your session UserID (if provided/known).
+
+**6. Risks and Benefits:**
+*   Participating in this study involves risks **no greater than those encountered in everyday life** (e.g., reflecting on your opinions).
+*   There are **no direct benefits** guaranteed to you from participating, although your responses will contribute valuable insights to research on education and career preparation.
+
+**7. Contact Information:**
+*   If you have questions about this study, please contact the researcher, **Janik Deutscher (janik.deutscher@upf.edu)**.
+*   If you have concerns about this study or your rights as a participant, you may contact **UPF’s Institutional Committee for the Ethical Review of Projects (CIREP)** by phone (+34 935 422 186) or email (secretaria.cirep@upf.edu). CIREP is independent of the research team and treats inquiries confidentially.
+
+**8. GDPR Information (Data Protection):**
+*   In accordance with the General Data Protection Regulation (GDPR) 2016/679 (EU), we provide the following:
+    *   **Data Controller:** Universitat Pompeu Fabra. Pl. de la Mercè, 10-12. 08002 Barcelona. Tel. +34 935 422 000.
+    *   **Data Protection Officer (DPO):** Contact via email at dpd@upf.edu.
+    *   **Purposes of Processing:** Carrying out the research project described above. Anonymized research data will be kept as described in section 4. The temporary processing of interview data by the AI provider via API is described in section 3.
+    *   **Legal Basis:** Your explicit consent. You can withdraw consent at any time (though data withdrawal post-submission may be limited as explained above).
+    *   **Your Rights:** You have the right to access your data; request rectification, deletion, or portability (in certain cases); object to processing; or request limitation. Procedures are described at www.upf.edu/web/proteccio-dades/drets. Contact the DPO (dpd@upf.edu) for queries. If unsatisfied, you may contact the Catalan Data Protection Authority (apdcat.gencat.cat).
     """)
+    # --- END REVISED DATA PROTECTION INFO ---
 
     # --- Consent Checkbox ---
-    consent = st.checkbox("I confirm that I have read and understood the information above, I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.consent_given) # Reflect current state
+    consent = st.checkbox("I confirm that I have read and understood the information sheet above, including the information about how the AI interview works. I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.consent_given) # Reflect current state
 
     # Store consent checkbox state immediately
     st.session_state.consent_given = consent
@@ -155,9 +195,6 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
             st.session_state.current_stage = INTERVIEW_STAGE # Explicitly set next stage
             st.rerun()
     elif not st.session_state.consent_given:
-        # This message will show if the button is visible but disabled (it shouldn't be due to 'disabled' arg, but safe fallback)
-        # A better approach is implied feedback: the button is simply unclickable until box is checked.
-        # st.warning("Please check the consent box above to proceed.")
         pass
 
 
@@ -260,7 +297,7 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
 # --- Section 2: Survey Stage ---
 elif st.session_state.get("current_stage") == SURVEY_STAGE:
     st.title("Part 2: Survey")
-    st.info(f"Thank you {username}, please answer a few final questions.")
+    st.info(f"Thank you {username}, please answer a few final questions.") # Removed username display for better privacy practice if needed
     # Survey options definitions
     age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]; gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]; major_options = ["Select...", "Computer Science", "Engineering (Other)", "Business", "Humanities", "Social Sciences", "Natural Sciences", "Arts", "Health Sciences", "Other", "Not Applicable"]; year_options = ["Select...", "1st Year Undergraduate", "2nd Year Undergraduate", "3rd Year Undergraduate", "4th+ Year Undergraduate", "Graduate Student", "Postgraduate/Doctoral", "Not a Student"]; gpa_values = np.round(np.arange(5.0, 10.01, 0.1), 1); gpa_options = ["Select...", "Below 5.0"] + [f"{gpa:.1f}" for gpa in gpa_values] + ["Prefer not to say / Not applicable"]; ai_freq_options = ["Select...", "Frequently (Daily/Weekly)", "Occasionally (Monthly)", "Rarely (Few times a year)", "Never", "Unsure"]
 
