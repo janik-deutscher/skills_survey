@@ -119,7 +119,7 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     st.markdown(f"""
     Hi there, thanks for your interest in this research project!
 
-    My name is Janik Deutscher, and I'm a PhD Candidate at UPF. For my research, I'm exploring how university students like you think about valuable skills for the future, the role of Artificial Intelligence (AI), and how these views connect to educational choices.
+    My name is Janik, and I'm a PhD Candidate at UPF. For my research, I'm exploring how university students like you think about valuable skills for the future, the role of Artificial Intelligence (AI), and how these views connect to educational choices.
 
     To understand your perspective, this study involves an **interview conducted by an AI assistant** followed by a short survey.
 
@@ -162,7 +162,7 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 *   Your participation is entirely **voluntary**.
 *   You can **stop the interview at any time** without penalty by using the "Quit" button.
 *   You may choose **not to answer any specific question** in the survey.
-*   Once your data is submitted and anonymized, removing your specific responses may be difficult. However, if you have concerns after participation, you can contact Janik Deutscher (janik.deutscher@upf.edu) with your session UserID (if provided/known).
+*   Once your data is submitted and anonymized, removing your specific responses may be difficult. However, if you have concerns after participation, you can contact Janik Deutscher (janik.deutscher@upf.edu) with your session UserID.
 
 **6. Risks and Benefits:**
 *   Participating in this study involves risks **no greater than those encountered in everyday life** (e.g., reflecting on your opinions).
