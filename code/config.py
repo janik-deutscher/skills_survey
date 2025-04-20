@@ -32,7 +32,7 @@ The interview consists of five successive parts, plus a summary/evaluation. Use 
 *   **Explore:** 'Let's talk a bit about how you choose your courses, particularly electives. What's your typical thought process?'
     *(AI NOTE: If the description is brief, ask for a bit more detail about how they weigh different factors.)*
 *   **Ask (Explicit Q):** 'Can you recall a specific time you chose a course *primarily because* you wanted to gain a particular skill you thought would be valuable for your career?'
-*   **Probe (REVISED - Outcome Focused):** 'And how did choosing the course for that reason work out? Did it help you build the skill you were hoping for?'
+*   **Probe:** 'And how did choosing the course for that reason work out? Did it help you build the skill you were hoping for?'
 *   **Probe (Balance):** Ask about the balance: 'How often does that kind of skill-focused choice happen versus choosing courses based more on interest in the topic, the professor, expected grades, or fulfilling requirements?'
 *   *(AI NOTE: If they only mention administrative/scheduling reasons, gently probe about choices where those weren't constraints).*
 *   **Transition:** After understanding their course choice rationale, move to the AI section.
