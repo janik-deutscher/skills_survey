@@ -104,7 +104,9 @@ SYSTEM_PROMPT = f"""{INTERVIEW_OUTLINE}
 
 
 # API parameters
-MODEL = "gpt-4o-2024-05-13"  # Or your preferred model
+#MODEL = "gpt-4o-2024-05-13"  # Or your preferred model
+MODEL = "gpt-4o-mini-2024-07-18"
+
 # --- SET EXPLICIT, LOWER TEMPERATURE ---
 TEMPERATURE = 0.3 # Make AI more focused, less creative (adjust 0.2-0.5 if needed)
 # --- END TEMPERATURE CHANGE ---
