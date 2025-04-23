@@ -83,40 +83,31 @@ if "username" not in st.session_state: st.session_state.username = None
 # Try to get username from local storage FIRST
 if st.session_state.username is None:
     storage_key = "skills_survey_username_uuid"
-    # The component might need a dummy UI element to trigger JS on first load
-    # Add a hidden button or small text element if retrieval seems unreliable
-    # st.markdown("<span id='local_storage_trigger'></span>", unsafe_allow_html=True) # Example trigger
-
     username_from_storage = localS.getItem(storage_key)
     print(f"Raw value retrieved from local storage for key '{storage_key}': {username_from_storage}") # DEBUG Print raw value
 
-    # Check if retrieved value is directly the username string (and not None or empty)
     retrieved_username = None
     if isinstance(username_from_storage, dict) and 'value' in username_from_storage:
         retrieved_username = username_from_storage['value']
-    elif isinstance(username_from_storage, str): # Handle case where it might store directly as string
+    elif isinstance(username_from_storage, str):
         retrieved_username = username_from_storage
 
-    if retrieved_username: # Check if we got a non-empty string
+    if retrieved_username:
         print(f"Found username string in local storage: {retrieved_username}")
         st.session_state.username = retrieved_username
     else:
-        # Handle cases where it might be None, empty string, or maybe {}
         if username_from_storage is not None:
              print(f"Value found in local storage ({username_from_storage}) is not a valid username string or is null/empty. Generating new.")
         else:
              print("No username key/value found in local storage. Generating new one.")
 
-        # Generate a new UUID
         new_username = f"user_{uuid.uuid4()}"
         st.session_state.username = new_username
-        # Store the *new* username DIRECTLY as a string
         localS.setItem(storage_key, new_username)
         print(f"INFO: Generated new user UUID and saved to local storage: {new_username}")
-        # Force a rerun immediately after setting the username for the first time
         st.rerun()
 
-username = st.session_state.username # Assign the established username
+username = st.session_state.username
 # --- <<< END REVISED USERNAME LOGIC >>> ---
 
 
@@ -131,7 +122,6 @@ if username:
 def initialize_session_state_with_firestore(user_id):
     if st.session_state.get("session_initialized", False): return
     print(f"Attempting to initialize session for user: {user_id}")
-    # REMOVED manual_question_index, manual_answers_storage, manual_answers_formatted, partial_ai_transcript_formatted
     default_values = {
         "messages": [], "current_stage": WELCOME_STAGE, "consent_given": False,
         "start_time": None, "start_time_file_names": None, "interview_active": False,
@@ -141,34 +131,24 @@ def initialize_session_state_with_firestore(user_id):
         if key not in st.session_state: st.session_state[key] = default_value
     print("Initialized session state with default values.")
 
-    # Load state and messages from Firestore
-    loaded_state, loaded_messages = utils.load_interview_state_from_firestore(user_id) # Util function now handles removing manual state keys if they exist in older records
+    loaded_state, loaded_messages = utils.load_interview_state_from_firestore(user_id)
     st.session_state.messages = loaded_messages
 
-    # Inject system prompt if needed
     if api == "openai":
         if not st.session_state.messages or st.session_state.messages[0].get("role") != "system":
             print("System prompt missing after loading messages for OpenAI. Re-injecting.")
             sys_prompt_dict = {"role": "system", "content": config.SYSTEM_PROMPT}
             st.session_state.messages.insert(0, sys_prompt_dict)
 
-    # Overwrite defaults with loaded state
     if loaded_state:
         print(f"Overwriting defaults with state loaded from Firestore for user: {user_id}")
         st.session_state.current_stage = loaded_state.get("current_stage", st.session_state.current_stage)
-        # CRITICAL: If loaded state is manual fallback, reset to interview stage
-        # if st.session_state.current_stage == MANUAL_INTERVIEW_STAGE: # Check against the old constant name just in case
-        #     print(f"Detected old manual fallback stage for user {user_id}. Resetting to INTERVIEW_STAGE.")
-        #     st.session_state.current_stage = INTERVIEW_STAGE
-        #     # Force save this correction back? Or let next action save it? Let next action save.
-
         st.session_state.consent_given = loaded_state.get("consent_given", st.session_state.consent_given)
         st.session_state.interview_active = loaded_state.get("interview_active", st.session_state.interview_active)
         st.session_state.interview_completed_flag = loaded_state.get("interview_completed_flag", st.session_state.interview_completed_flag)
         st.session_state.survey_completed_flag = loaded_state.get("survey_completed_flag", st.session_state.survey_completed_flag)
         st.session_state.welcome_shown = loaded_state.get("welcome_shown", st.session_state.welcome_shown)
 
-        # Load start time
         start_time_unix = loaded_state.get("start_time_unix", None)
         if start_time_unix:
              try:
@@ -192,25 +172,18 @@ def determine_current_stage(user_id):
     interview_done = st.session_state.get("interview_completed_flag", False)
     welcome_done = st.session_state.get("welcome_shown", False)
 
-    # Simplified Logic
     if survey_done:
         new_stage = COMPLETED_STAGE
-    elif interview_done: # Interview marked as done (either by code or quit button)
+    elif interview_done:
         new_stage = SURVEY_STAGE
-    elif welcome_done: # Consent given, interview started but not finished
+    elif welcome_done:
         new_stage = INTERVIEW_STAGE
-    else: # Hasn't passed welcome/consent yet
+    else:
         new_stage = WELCOME_STAGE
-
-    # Handle edge case where loaded stage might be the old manual stage
-    # if new_stage == "manual_interview": # Use string directly as constant is removed
-    #     print("Correcting stage from obsolete 'manual_interview' to INTERVIEW_STAGE.")
-    #     new_stage = INTERVIEW_STAGE
 
     if new_stage != current_stage_in_state:
          print(f"Stage re-determined: {current_stage_in_state} -> {new_stage}")
          st.session_state.current_stage = new_stage
-         # Save the corrected stage immediately if it changed
          utils.save_interview_state_to_firestore(username, {"current_stage": new_stage})
 
 
@@ -246,7 +219,7 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     """)
     st.markdown("---")
     st.subheader("Information Sheet & Consent Form")
-    # --- Consent Form Content (No Changes) ---
+    # --- Consent Form Content (UPDATED NIS explanation) ---
     st.markdown(f"""
 **Study Title:** Student Perspectives on Skills, Careers, and Artificial Intelligence \n
 **Researcher:** Janik Deutscher (janik.deutscher@upf.edu), PhD Candidate, Universitat Pompeu Fabra
@@ -254,35 +227,35 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 **Please read the following information carefully before deciding to participate:**
 
 **1. Purpose of the Research:**
-*   This study is part of a PhD research project aiming to understand how university students perceive valuable skills for their future careers, how the rise of Artificial Intelligence (AI) might influence these views, and how this connects to educational choices.
+*   This study is part of a PhD research project aiming to understand how university students perceive valuable skills for their future careers, how the rise of Artificial Intelligence (AI) might influence these views, and how this connects to educational choices, interests, and overall university experience.
 
 **2. What Participation Involves:**
 *   If you agree to participate, you will engage in:
     *   An interview conducted via text chat with an **AI assistant**. The AI will ask you open-ended questions about your career aspirations, skill perceptions, educational choices, and views on AI. Should the AI encounter persistent technical issues, the interview may not be able to be completed within this application.
-    *   A **short survey** following the interview with some additional questions.
+    *   A **short survey** following the interview with some additional questions, including demographics, university experience, and AI usage.
 *   The estimated total time commitment is approximately **30-40 minutes**.
 
 **3. Privacy, Anonymity, API Usage, and Logging:**
-*   Your privacy is protected. No directly identifiable information (like your name, email, or address) will be collected. Your session is identified only by the anonymized User ID: `{username}`.
+*   Your privacy is protected. No directly identifiable information (like your name, email, or address) will be collected. Your session is identified only by the anonymized User ID: `{username}`. The optional Student Number (NIS) collected in the final survey will be stored securely and handled according to strict UPF data protection regulations. It will not be shared outside the research context defined by UPF protocols.
 *   **AI Interview Data Handling:** To enable the AI assistant to converse with you, your typed responses during the interview will be sent via a secure Application Programming Interface (API) to the AI service provider (OpenAI or Anthropic, depending on the model used). This is done solely to generate the AI's replies in real-time.
 *   **Data Use by AI Provider:** Based on the current policies of major AI providers like OpenAI and Anthropic for API usage, data submitted through the API is **not used to train their AI models**.
-*   **Research Data:** The research team receives the final survey answers and interview transcript via secure methods (e.g., Google Sheets with restricted access). During data analysis, this data will be linked to your **anonymized User ID** (`{username}`), not to any other identifier.
-*   **Anonymization:** Any potentially identifying details mentioned during the interview (e.g., specific names, unique places) will be **removed or pseudonymized** in the final transcripts used for analysis or publication.
+*   **Research Data:** The research team receives the final survey answers (including the optional NIS and other survey responses) and interview transcript via secure methods (e.g., Google Sheets with restricted access). During data analysis, this data will be linked to your **anonymized User ID** (`{username}`), not to any other identifier.
+*   **Anonymization:** Any potentially identifying details mentioned during the interview (e.g., specific names, unique places) will be **removed or pseudonymized** in the final transcripts used for analysis or publication. The NIS, if provided, will be handled according to strict data protection protocols.
 *   **Persistent Logging (Firestore):** To prevent data loss due to technical issues (e.g., browser crash, network disconnect), your anonymized chat messages are saved to a secure cloud database (Google Cloud Firestore) hosted by Google after each turn. This data is linked only to your anonymized User ID (`{username}`) and is used primarily for data recovery and secondarily for analysis if final submission fails. Key application state (like consent status and current progress stage) is also saved here to allow resuming sessions.
 
 **4. Data Storage and Use:**
-*   Anonymized research data (final GSheet entries, potentially anonymized Firestore logs) will be stored securely on UPF servers or secure cloud platforms (GCP).
+*   Anonymized research data (final GSheet entries, potentially anonymized Firestore logs, and NIS handled separately under strict protocols) will be stored securely on UPF servers or secure cloud platforms (GCP).
 *   Data will be kept for the duration of the PhD project and up to two years after its finalization for scientific validation, according to UPF regulations.
 *   Anonymized data may be reused for other related research projects or archived/published in a public repository in the future.
 
 **5. Voluntary Participation and Withdrawal:**
-*   Your participation is entirely **voluntary**.
+*   Your participation is entirely **voluntary**. You may choose not to provide your Student Number (NIS).
 *   You can **stop the interview at any time** without penalty by using the "Quit" button or simply closing the window. Due to the persistent logging, data up to the point you stopped may still be retained linked to your User ID.
 *   You may choose **not to answer any specific question** in the survey.
 *   If you have concerns after participation, you can contact Janik Deutscher (janik.deutscher@upf.edu) with your User ID (`{username}`). Data removal might be complex once anonymized and aggregated.
 
 **6. Risks and Benefits:**
-*   Participating in this study involves risks **no greater than those encountered in everyday life** (e.g., reflecting on your opinions).
+*   Participating in this study involves risks **no greater than those encountered in everyday life** (e.g., reflecting on your opinions). Providing your NIS carries the standard risks associated with sharing such identifiers, mitigated by strict data security protocols.
 *   There are **no direct benefits** guaranteed to you from participating, although your responses will contribute valuable insights to research on education and career preparation.
 
 **7. Contact Information:**
@@ -293,12 +266,12 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 *   In accordance with the General Data Protection Regulation (GDPR) 2016/679 (EU), we provide the following:
     *   **Data Controller:** Universitat Pompeu Fabra. Pl. de la Mercè, 10-12. 08002 Barcelona. Tel. +34 935 422 000.
     *   **Data Protection Officer (DPO):** Contact via email at dpd@upf.edu.
-    *   **Purposes of Processing:** Carrying out the research project described above. Anonymized research data will be kept as described in section 4. The temporary processing of interview data by the AI provider via API is described in section 3. Persistent logging to Firestore for data integrity and session resumption is described in section 3.
-    *   **Legal Basis:** Your explicit consent. You can withdraw consent at any time (though data withdrawal post-submission may be limited as explained above).
+    *   **Purposes of Processing:** Carrying out the research project described above. Anonymized research data will be kept as described in section 4. The optional NIS will be processed according to UPF data protection protocols. The temporary processing of interview data by the AI provider via API is described in section 3. Persistent logging to Firestore for data integrity and session resumption is described in section 3.
+    *   **Legal Basis:** Your explicit consent. You can withdraw consent at any time (though data withdrawal post-submission may be limited as explained above). The processing of NIS is based on your explicit consent to provide it.
     *   **Your Rights:** You have the right to access your data; request rectification, deletion, or portability (in certain cases); object to processing; or request limitation. Procedures are described at www.upf.edu/web/proteccio-dades/drets. Contact the DPO (dpd@upf.edu) for queries. If unsatisfied, you may contact the Catalan Data Protection Authority (apdcat.gencat.cat).
     """)
     # --- End Consent Form Content ---
-    consent = st.checkbox("I confirm that I have read and understood the information sheet above, including the information about how the AI interview works and data logging. I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.get("consent_given", False))
+    consent = st.checkbox("I confirm that I have read and understood the information sheet above, including the information about how the AI interview works, data logging, and the optional collection of the Student Number (NIS). I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.get("consent_given", False))
     if consent != st.session_state.get("consent_given", False):
         st.session_state.consent_given = consent
         utils.save_interview_state_to_firestore(username, {'consent_given': consent})
@@ -323,43 +296,38 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
         st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
         quit_message = "You have chosen to end the interview early. Proceeding to the final questions."; quit_msg_dict = {"role": "assistant", "content": quit_message}
         st.session_state.messages.append(quit_msg_dict); utils.save_message_to_firestore(username, quit_msg_dict)
-        # Format transcript up to this point before quitting
         utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-        # Save state including completion flag and move stage
         utils.save_interview_state_to_firestore(username, {"interview_active": False, "interview_completed_flag": True, "current_stage": SURVEY_STAGE})
         st.warning(quit_message); st.session_state.current_stage = SURVEY_STAGE; print("Moving to Survey Stage after Quit."); time.sleep(1); st.rerun()
 
     # --- Display Chat History (No Changes) ---
     for message in st.session_state.get("messages", []):
         if message.get('role') == "system": continue;
-        # Exclude closing codes themselves and the messages they trigger
         if message.get('content', '') in config.CLOSING_MESSAGES.keys(): continue
         is_closing_message_display = any(message.get('content', '') == display_text for code, display_text in config.CLOSING_MESSAGES.items())
         if is_closing_message_display: continue
         avatar = config.AVATAR_INTERVIEWER if message.get('role') == "assistant" else config.AVATAR_RESPONDENT
         with st.chat_message(message.get('role', 'unknown'), avatar=avatar): st.markdown(message.get('content', ''))
 
-    # --- Initial Assistant Message Logic (MODIFIED Fallback Handling) ---
+    # --- Initial Assistant Message Logic (No Manual Fallback) ---
     if not st.session_state.get("messages", []) or \
        (api == "openai" and len(st.session_state.get("messages", [])) == 1 and st.session_state.get("messages", [])[0].get("role") == "system"):
         print("No previous assistant/user messages found, attempting to get initial message.")
         try:
-            # Ensure system prompt is present for OpenAI
             if api == "openai":
                  if not st.session_state.messages or st.session_state.messages[0].get("role") != "system":
                      sys_prompt_dict = {"role": "system", "content": config.SYSTEM_PROMPT}
                      st.session_state.messages.insert(0, sys_prompt_dict)
-                     utils.save_interview_state_to_firestore(username, {}) # Trigger a save to record the prompt addition potentially
+                     utils.save_interview_state_to_firestore(username, {})
 
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
                 message_placeholder = st.empty(); message_placeholder.markdown("Thinking...")
                 api_messages = []; message_interviewer = ""
-                # Prepare messages for API call
                 if api == "openai":
                     if st.session_state.messages and st.session_state.messages[0].get("role") == 'system':
-                         api_messages = [st.session_state.messages[0]] # Only system prompt initially
+                         api_messages = [st.session_state.messages[0]]
                 elif api == "anthropic":
-                    api_messages = [{"role": "user", "content": "Please begin the interview."}] # Anthropic needs initial user message
+                    api_messages = [{"role": "user", "content": "Please begin the interview."}]
 
                 api_kwargs = { "model": config.MODEL, "messages": api_messages, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": False }
                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT
@@ -378,34 +346,28 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                     print("Initial API call success after retry logic.")
                     message_placeholder.markdown(message_interviewer)
 
-                # --- MODIFIED ERROR HANDLING: No Manual Fallback ---
                 except RETRYABLE_ERRORS as e_retry:
                      print(f"Initial API call failed after retries: {e_retry}")
                      message_placeholder.error(f"Error connecting to the AI assistant after multiple attempts: {e_retry}. Your progress is saved. Please try refreshing the page in a few moments. If the problem persists, contact the researcher.")
-                     # Save partial transcript for debugging (optional)
                      utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
-                     # DO NOT change stage. DO NOT mark interview complete.
-                     st.stop() # Halt further execution for this run
+                     st.stop()
                 except Exception as e_fatal:
                      print(f"Non-retryable initial API error: {e_fatal}")
                      message_placeholder.error(f"An unexpected error occurred connecting to the AI assistant: {e_fatal}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
-                     # Save partial transcript for debugging (optional)
                      utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
-                     # DO NOT change stage. DO NOT mark interview complete.
-                     st.stop() # Halt further execution for this run
+                     st.stop()
 
-            # Save the successful initial message
             assistant_msg_dict = {"role": "assistant", "content": message_interviewer.strip()}
             st.session_state.messages.append(assistant_msg_dict)
             utils.save_message_to_firestore(username, assistant_msg_dict)
             print("Initial message obtained and saved."); time.sleep(0.1); st.rerun()
 
-        except Exception as e: # Catch potential errors in the setup before API call
+        except Exception as e:
             if 'message_placeholder' in locals(): message_placeholder.empty()
             st.error(f"Failed during initial message setup: {e}. Please refresh and try again.");
             st.stop()
 
-    # --- Chat Input & Response Logic (MODIFIED Fallback Handling) ---
+    # --- Chat Input & Response Logic (No Manual Fallback) ---
     if prompt := st.chat_input("Your response..."):
         user_msg_dict = {"role": "user", "content": prompt}
         st.session_state.messages.append(user_msg_dict); utils.save_message_to_firestore(username, user_msg_dict)
@@ -416,16 +378,14 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                  message_placeholder = st.empty(); message_placeholder.markdown("Thinking...")
                  message_interviewer = ""; full_response_content = ""; stream_closed = False; detected_code = None
 
-                 # Prepare messages for API call (system prompt handled differently by APIs)
                  if api == "openai": api_messages_for_call = st.session_state.messages
                  elif api == "anthropic": api_messages_for_call = [m for m in st.session_state.messages if m.get("role") != "system"]
 
                  api_kwargs = { "model": config.MODEL, "messages": api_messages_for_call, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": True }
-                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT # Pass system prompt separately for Anthropic
+                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT
                  if config.TEMPERATURE is not None: api_kwargs["temperature"] = config.TEMPERATURE
 
                  try:
-                    # --- Streaming Logic (OpenAI) ---
                     if api == "openai":
                         stream = openai_client.chat.completions.create(**api_kwargs)
                         for chunk in stream:
@@ -433,88 +393,64 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                                  delta = chunk.choices[0].delta
                                  if delta and delta.content:
                                      text_delta = delta.content; full_response_content += text_delta; current_content_stripped = full_response_content.strip()
-                                     # Check for closing code
                                      for code in config.CLOSING_MESSAGES.keys():
                                          if code == current_content_stripped:
                                              detected_code = code
-                                             message_interviewer = full_response_content.replace(code, "").strip() # Get text before code
-                                             stream_closed = True; break
+                                             message_interviewer = full_response_content.replace(code, "").strip(); stream_closed = True; break
                                      if stream_closed: break
-                                     # Update placeholder during stream
-                                     message_interviewer = full_response_content
-                                     message_placeholder.markdown(message_interviewer + "▌")
-                        if not stream_closed: message_placeholder.markdown(message_interviewer) # Final update
+                                     message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
+                        if not stream_closed: message_placeholder.markdown(message_interviewer)
 
-                    # --- Streaming Logic (Anthropic) ---
                     elif api == "anthropic":
                          with anthropic_client.messages.stream(**api_kwargs) as stream:
                             for text_delta in stream.text_stream:
                                  if text_delta is not None:
                                      full_response_content += text_delta; current_content_stripped = full_response_content.strip()
-                                     # Check for closing code
                                      for code in config.CLOSING_MESSAGES.keys():
                                          if code == current_content_stripped:
                                              detected_code = code
-                                             message_interviewer = full_response_content.replace(code,"").strip()
-                                             stream_closed = True; break
+                                             message_interviewer = full_response_content.replace(code,"").strip(); stream_closed = True; break
                                      if stream_closed: break
-                                     # Update placeholder during stream
-                                     message_interviewer = full_response_content
-                                     message_placeholder.markdown(message_interviewer + "▌")
-                         if not stream_closed: message_placeholder.markdown(message_interviewer) # Final update
+                                     message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
+                         if not stream_closed: message_placeholder.markdown(message_interviewer)
 
-                    # --- Process Response After Stream ---
                     assistant_msg_content = full_response_content.strip()
                     assistant_msg_dict = {"role": "assistant", "content": assistant_msg_content}
 
-                    # Save assistant message (unless it's just the code)
-                    if not detected_code or message_interviewer: # Save if there's actual content besides the code
-                        # Avoid saving duplicate if stream ended abruptly after last save
+                    if not detected_code or message_interviewer:
                         if not st.session_state.messages or st.session_state.messages[-1] != assistant_msg_dict:
                            st.session_state.messages.append(assistant_msg_dict)
                            utils.save_message_to_firestore(username, assistant_msg_dict)
 
-                    # --- Handle Closing Code ---
                     if detected_code:
                         st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
                         closing_message_display = config.CLOSING_MESSAGES[detected_code]
 
-                        # Display any text *before* the code
                         if message_interviewer: message_placeholder.markdown(message_interviewer)
-                        else: message_placeholder.empty() # Clear "Thinking..." if only code received
+                        else: message_placeholder.empty()
 
-                        # Save final transcript data
                         utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-                        # Save state and move to survey
                         utils.save_interview_state_to_firestore(username, {"interview_active": False, "interview_completed_flag": True, "current_stage": SURVEY_STAGE})
-                        if closing_message_display: st.success(closing_message_display) # Show the nice closing message
+                        if closing_message_display: st.success(closing_message_display)
                         st.session_state.current_stage = SURVEY_STAGE
                         print("Moving to Survey Stage after code detection."); time.sleep(2); st.rerun()
 
-                 # --- MODIFIED ERROR HANDLING: No Manual Fallback ---
                  except RETRYABLE_ERRORS as e_retry:
                      print(f"API call failed during chat stream after retries: {e_retry}")
                      message_placeholder.error(f"Connection to the AI assistant failed: {e_retry}. Your progress is saved. Please try refreshing the page in a few moments. If the problem persists, contact the researcher.")
-                     # Save partial transcript for debugging (optional)
                      utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
-                     # DO NOT change stage. DO NOT mark interview complete.
-                     st.stop() # Halt further execution for this run
+                     st.stop()
                  except Exception as e_fatal:
                      print(f"Unhandled API error during chat stream: {e_fatal}")
                      message_placeholder.error(f"An unexpected error occurred: {e_fatal}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
-                     # Save partial transcript for debugging (optional)
                      utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
-                     # DO NOT change stage. DO NOT mark interview complete.
-                     st.stop() # Halt further execution for this run
+                     st.stop()
 
-        # --- Catch errors in the broader chat response handling ---
         except Exception as e:
-            if 'message_placeholder' in locals(): message_placeholder.empty() # Clear thinking message
+            if 'message_placeholder' in locals(): message_placeholder.empty()
             st.error(f"An error occurred processing the chat response: {e}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
-            # Save partial transcript for debugging (optional)
             utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
-            # DO NOT change stage. DO NOT mark interview complete.
-            st.stop() # Halt further execution for this run
+            st.stop()
 
 
 # --- Section 1.5: Manual Interview Fallback Stage ---
@@ -526,18 +462,16 @@ elif st.session_state.get("current_stage") == SURVEY_STAGE:
     st.title("Part 2: Survey")
     st.info(f"Thank you, please answer a few final questions.")
 
-    # --- Transcript Check Logic (Simplified - No Manual Answers) ---
+    # --- Transcript Check Logic ---
     if "current_formatted_transcript_for_gsheet" not in st.session_state:
          print("WARNING: Formatted transcript key missing at survey stage entry. Attempting generation.")
-         # Attempt last-resort transcript formatting from messages
          utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.get("messages", []))
-         # Check if it was successfully generated
          if "current_formatted_transcript_for_gsheet" not in st.session_state:
               st.error("Error: Could not generate the interview transcript for saving.")
               st.session_state.current_formatted_transcript_for_gsheet = "ERROR: Transcript generation failed before survey."
               print("CRITICAL ERROR: Transcript generation failed before survey.")
 
-    # --- UPDATED Survey Options ---
+    # --- Survey Options ---
     age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]
     gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]
     major_options = [
@@ -564,25 +498,43 @@ elif st.session_state.get("current_stage") == SURVEY_STAGE:
 
     with st.form("survey_form"):
         st.subheader("Demographic Information")
-        # --- UPDATED Question Wording ---
         age = st.selectbox("What is your age?", age_options, key="age")
         gender = st.selectbox("What is your gender?", gender_options, key="gender")
         major = st.selectbox("What is your main field of study (or double degree)?", major_options, key="major")
         year_of_study = st.selectbox("What year of study are you currently in?", year_options, key="year")
         gpa = st.selectbox("What is your approximate GPA or academic average (on a scale of 10)?", gpa_options, key="gpa")
 
+        # --- UPDATED NIS Field Help Text ---
+        student_nis_input = st.text_input("Student number (NIS)", key="student_nis", help="Providing your NIS is optional.")
+
+        st.subheader("University Experience")
+        learning_enjoyment_value = st.slider(
+            "From 0 to 100, how much do you enjoy learning just for the sake of it?",
+            min_value=0,
+            max_value=100,
+            value=50,
+            key="learning_enjoyment_slider",
+            help="0 = Not at all, 100 = Very much"
+        )
+        university_enjoyment_value = st.slider(
+            "From 0 to 100, how much are you enjoying your experience at university?",
+            min_value=0,
+            max_value=100,
+            value=50,
+            key="university_enjoyment_slider",
+            help="Considering everything (academics, social life, etc.). 0 = Not at all, 100 = Very much"
+        )
+
         st.subheader("AI Usage")
-        # --- NEW Slider for AI Usage ---
         ai_usage_percentage_value = st.slider(
             "How much are you using AI for your university work?",
             min_value=0,
             max_value=100,
-            value=50, # Default value in the middle
+            value=50,
             key="ai_usage_slider",
             help="Estimate the percentage of your university tasks where you utilize AI tools. 0 = Not at all, 100 = For almost all tasks."
         )
-        # --- UPDATED Question Wording & REMOVED Placeholder ---
-        ai_model = st.text_input("Which AI model are you mostly using?", key="ai_model") # Placeholder removed
+        ai_model = st.text_input("Which AI model are you mostly using?", key="ai_model")
 
         submitted = st.form_submit_button("Submit Survey Responses")
 
@@ -591,27 +543,27 @@ elif st.session_state.get("current_stage") == SURVEY_STAGE:
         if (age == "Select..." or gender == "Select..." or major == "Select..." or year_of_study == "Select..." or gpa == "Select..."):
             st.warning("Please answer all dropdown questions.")
         else:
-            # --- Capture slider value ---
+            # --- Capture all responses ---
             survey_responses = {
                 "age": age,
                 "gender": gender,
                 "major": major,
                 "year": year_of_study,
                 "gpa": gpa,
-                "ai_usage_percentage": ai_usage_percentage_value, # Store slider value
+                "student_nis": student_nis_input.strip(),
+                "learning_enjoyment": learning_enjoyment_value,
+                "university_enjoyment": university_enjoyment_value,
+                "ai_usage_percentage": ai_usage_percentage_value,
                 "ai_model": ai_model
             }
-            # --- Pass survey_responses dict to saving functions ---
-            # save_survey_data now handles GSheet & Firestore backup (without manual answers)
+            # --- Pass to saving functions ---
             save_successful = utils.save_survey_data(username, survey_responses)
 
             if save_successful:
                 st.session_state.survey_completed_flag = True; st.session_state.current_stage = COMPLETED_STAGE
-                # Final state update confirming completion
                 utils.save_interview_state_to_firestore(username, {"current_stage": COMPLETED_STAGE, "survey_completed_flag": True})
                 st.success("Survey submitted! Thank you."); st.balloons(); time.sleep(3); st.rerun()
             else:
-                 # Error message improved to reflect primary (GSheet) vs backup (Firestore)
                 st.warning("Could not save survey results to primary storage (Google Sheets). Your responses may have been saved to our backup system. Please contact the researcher.")
 
 
@@ -622,18 +574,15 @@ elif st.session_state.get("current_stage") == COMPLETED_STAGE:
         st.success("You have completed the interview and the survey. Your contribution is greatly appreciated!")
         st.markdown("You may now close this window.")
     else:
-        # This case should be less likely now, but kept as a safeguard
         st.warning("Navigated to completion page, but survey completion status is not confirmed in the session.")
         st.markdown("If you believe this is an error, please contact the researcher.")
 
 
 # --- Fallback / Initializing ---
 else:
-    # This handles unexpected state values or initialization issues
     st.spinner("Loading application state...")
     print(f"Info: Fallback/Loading state. User: {username}, Stage: {st.session_state.get('current_stage')}, Initialized: {st.session_state.get('session_initialized')}")
     time.sleep(1.0)
-    # Attempt to re-determine stage if possible
     if username and st.session_state.get("session_initialized"):
         determine_current_stage(username)
-    st.rerun() # Attempt to re-render with potentially corrected state
+    st.rerun()
