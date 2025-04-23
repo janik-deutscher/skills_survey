@@ -9,7 +9,7 @@ import json
 import numpy as np
 import uuid
 import random # For GSheet throttle sleep
-import re # For parsing outline
+# Removed 're' import as it was only for manual questions map
 
 # --- NEW Firestore Import ---
 from google.cloud import firestore
@@ -26,7 +26,7 @@ from streamlit_local_storage import LocalStorage
 # --- Constants ---
 WELCOME_STAGE = "welcome"
 INTERVIEW_STAGE = "interview"
-MANUAL_INTERVIEW_STAGE = "manual_interview" # New stage for fallback
+# MANUAL_INTERVIEW_STAGE = "manual_interview" # REMOVED
 SURVEY_STAGE = "survey"
 COMPLETED_STAGE = "completed"
 
@@ -61,42 +61,8 @@ api_retry_decorator = retry(
 # --- End API Setup & Retry ---
 
 # --- Manual Interview Questions Setup ---
-# Extract main questions from the outline
-outline_parts = config.INTERVIEW_OUTLINE.split("**Part ")
-manual_questions_map = {}
-part_keys = ["Intro", "I", "II", "III", "IV"] # Match split parts
-current_part_index = 0
-intro_match = re.search(r"\*\*Begin the interview with:\*\*\s*'(.*?)'", config.INTERVIEW_OUTLINE, re.DOTALL)
-if intro_match: manual_questions_map["Intro"] = [{"key": "intro_q", "text": intro_match.group(1).strip()}]
-else: manual_questions_map["Intro"] = []
-framing_match = re.search(r"\*\*Ask Next \(Framing Q\):\*\*\s*'(.*?)'", config.INTERVIEW_OUTLINE, re.DOTALL)
-if framing_match: manual_questions_map["Framing"] = [{"key": "framing_q", "text": framing_match.group(1).strip()}]
-else: manual_questions_map["Framing"] = []
-for i, part_text in enumerate(outline_parts[1:]): # Skip text before Part I
-    part_key = f"Part{part_keys[i+1]}"; manual_questions_map[part_key] = []
-    ask_matches = re.findall(r"\*\*Ask\s*(?:\(.*?Q\))?\s*:\*\*\s*'(.*?)'", part_text, re.DOTALL)
-    for q_idx, q_text in enumerate(ask_matches):
-        manual_questions_map[part_key].append({"key": f"{part_key}_q{q_idx+1}", "text": q_text.strip()})
-manual_questions_map["Summary"] = [{"key": "summary_prompt", "text": "Based on our discussion (including any AI parts and your manual answers), could you briefly summarize your key perspectives on skills and AI's impact on them?"}]
-
-# Function to find the last completed part based on AI messages
-def find_last_ai_part_completed(messages):
-    last_completed_part_index = -1
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
-            content = msg.get("content", "")
-            if manual_questions_map.get("Framing") and manual_questions_map["Framing"][0]["text"] in content: return 0
-            for idx, part_key in enumerate(part_keys[1:]):
-                part_index_in_list = idx + 1
-                if part_key in manual_questions_map:
-                    for question_data in manual_questions_map[part_key]:
-                         if question_data["text"][:50] in content[:70]:
-                             last_completed_part_index = max(last_completed_part_index, part_index_in_list); break
-            if last_completed_part_index > 0: break
-    if last_completed_part_index == -1 and manual_questions_map.get("Intro"):
-         if any(manual_questions_map["Intro"][0]["text"] in msg.get("content","") for msg in reversed(messages) if msg.get("role")=="assistant"): return -1
-    return last_completed_part_index
-part_key_sequence = ["Intro", "Framing", "PartI", "PartII", "PartIII", "PartIV", "Summary"]
+# REMOVED - Manual question map parsing and related functions are no longer needed
+# --- End Manual Interview Questions Setup ---
 
 
 # --- Page Config ---
@@ -161,56 +127,92 @@ if username:
         os.makedirs(config.BACKUPS_DIRECTORY, exist_ok=True); os.makedirs(config.SURVEY_DIRECTORY, exist_ok=True)
     except OSError as e: print(f"Warning: Failed to create local data directories: {e}.")
 
-# --- Initialize Session State Function (Corrected Version) ---
+# --- Initialize Session State Function (Corrected Version - No Manual Fallback State) ---
 def initialize_session_state_with_firestore(user_id):
     if st.session_state.get("session_initialized", False): return
     print(f"Attempting to initialize session for user: {user_id}")
-    default_values = { "messages": [], "current_stage": WELCOME_STAGE, "consent_given": False, "start_time": None, "start_time_file_names": None, "interview_active": False, "interview_completed_flag": False, "survey_completed_flag": False, "welcome_shown": False, "partial_ai_transcript_formatted": "", "manual_answers_formatted": "" }
+    # REMOVED manual_question_index, manual_answers_storage, manual_answers_formatted, partial_ai_transcript_formatted
+    default_values = {
+        "messages": [], "current_stage": WELCOME_STAGE, "consent_given": False,
+        "start_time": None, "start_time_file_names": None, "interview_active": False,
+        "interview_completed_flag": False, "survey_completed_flag": False, "welcome_shown": False
+    }
     for key, default_value in default_values.items():
         if key not in st.session_state: st.session_state[key] = default_value
     print("Initialized session state with default values.")
-    loaded_state, loaded_messages = utils.load_interview_state_from_firestore(user_id)
+
+    # Load state and messages from Firestore
+    loaded_state, loaded_messages = utils.load_interview_state_from_firestore(user_id) # Util function now handles removing manual state keys if they exist in older records
     st.session_state.messages = loaded_messages
+
+    # Inject system prompt if needed
     if api == "openai":
         if not st.session_state.messages or st.session_state.messages[0].get("role") != "system":
             print("System prompt missing after loading messages for OpenAI. Re-injecting.")
             sys_prompt_dict = {"role": "system", "content": config.SYSTEM_PROMPT}
             st.session_state.messages.insert(0, sys_prompt_dict)
+
+    # Overwrite defaults with loaded state
     if loaded_state:
         print(f"Overwriting defaults with state loaded from Firestore for user: {user_id}")
         st.session_state.current_stage = loaded_state.get("current_stage", st.session_state.current_stage)
+        # CRITICAL: If loaded state is manual fallback, reset to interview stage
+        # if st.session_state.current_stage == MANUAL_INTERVIEW_STAGE: # Check against the old constant name just in case
+        #     print(f"Detected old manual fallback stage for user {user_id}. Resetting to INTERVIEW_STAGE.")
+        #     st.session_state.current_stage = INTERVIEW_STAGE
+        #     # Force save this correction back? Or let next action save it? Let next action save.
+
         st.session_state.consent_given = loaded_state.get("consent_given", st.session_state.consent_given)
         st.session_state.interview_active = loaded_state.get("interview_active", st.session_state.interview_active)
         st.session_state.interview_completed_flag = loaded_state.get("interview_completed_flag", st.session_state.interview_completed_flag)
         st.session_state.survey_completed_flag = loaded_state.get("survey_completed_flag", st.session_state.survey_completed_flag)
         st.session_state.welcome_shown = loaded_state.get("welcome_shown", st.session_state.welcome_shown)
-        st.session_state.partial_ai_transcript_formatted = loaded_state.get("partial_ai_transcript_formatted", "")
-        st.session_state.manual_answers_formatted = loaded_state.get("manual_answers_formatted", "")
+
+        # Load start time
         start_time_unix = loaded_state.get("start_time_unix", None)
         if start_time_unix:
              try:
                  loaded_start_time = float(start_time_unix); st.session_state.start_time = loaded_start_time
                  st.session_state.start_time_file_names = time.strftime("%Y%m%d_%H%M%S", time.localtime(loaded_start_time))
              except (TypeError, ValueError): print(f"Warning: Could not parse loaded start_time_unix: {start_time_unix}. Keeping default.")
+
     elif not loaded_messages:
         print(f"No previous state or messages found for {user_id}. Initializing fresh session.")
         if 'messages' not in st.session_state or not isinstance(st.session_state.messages, list): st.session_state.messages = []
+
     st.session_state.session_initialized = True
     print(f"Session initialized. Stage: {st.session_state.get('current_stage')}, Msgs: {len(st.session_state.get('messages', []))}, StartTime: {st.session_state.get('start_time')}")
 
-# --- Function to Determine Current Stage ---
+# --- Function to Determine Current Stage (No Manual Fallback) ---
 def determine_current_stage(user_id):
-    current_stage_in_state = st.session_state.get("current_stage"); new_stage = current_stage_in_state
-    survey_done = st.session_state.get("survey_completed_flag", False); interview_done = st.session_state.get("interview_completed_flag", False)
-    welcome_done = st.session_state.get("welcome_shown", False); manual_fallback = (current_stage_in_state == MANUAL_INTERVIEW_STAGE)
-    if survey_done: new_stage = COMPLETED_STAGE
-    elif manual_fallback: new_stage = MANUAL_INTERVIEW_STAGE
-    elif interview_done: new_stage = SURVEY_STAGE
-    elif welcome_done: new_stage = INTERVIEW_STAGE
-    else: new_stage = WELCOME_STAGE
+    current_stage_in_state = st.session_state.get("current_stage")
+    new_stage = current_stage_in_state
+
+    survey_done = st.session_state.get("survey_completed_flag", False)
+    interview_done = st.session_state.get("interview_completed_flag", False)
+    welcome_done = st.session_state.get("welcome_shown", False)
+
+    # Simplified Logic
+    if survey_done:
+        new_stage = COMPLETED_STAGE
+    elif interview_done: # Interview marked as done (either by code or quit button)
+        new_stage = SURVEY_STAGE
+    elif welcome_done: # Consent given, interview started but not finished
+        new_stage = INTERVIEW_STAGE
+    else: # Hasn't passed welcome/consent yet
+        new_stage = WELCOME_STAGE
+
+    # Handle edge case where loaded stage might be the old manual stage
+    # if new_stage == "manual_interview": # Use string directly as constant is removed
+    #     print("Correcting stage from obsolete 'manual_interview' to INTERVIEW_STAGE.")
+    #     new_stage = INTERVIEW_STAGE
+
     if new_stage != current_stage_in_state:
          print(f"Stage re-determined: {current_stage_in_state} -> {new_stage}")
          st.session_state.current_stage = new_stage
+         # Save the corrected stage immediately if it changed
+         utils.save_interview_state_to_firestore(username, {"current_stage": new_stage})
+
 
 # --- Initialize Session State ---
 if username is None:
@@ -244,6 +246,7 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     """)
     st.markdown("---")
     st.subheader("Information Sheet & Consent Form")
+    # --- Consent Form Content (No Changes) ---
     st.markdown(f"""
 **Study Title:** Student Perspectives on Skills, Careers, and Artificial Intelligence \n
 **Researcher:** Janik Deutscher (janik.deutscher@upf.edu), PhD Candidate, Universitat Pompeu Fabra
@@ -255,15 +258,15 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 
 **2. What Participation Involves:**
 *   If you agree to participate, you will engage in:
-    *   An interview conducted via text chat with an **AI assistant**. The AI will ask you open-ended questions about your career aspirations, skill perceptions, educational choices, and views on AI. Should the AI encounter a persistent technical issue, you may be asked to complete the remaining questions manually.
+    *   An interview conducted via text chat with an **AI assistant**. The AI will ask you open-ended questions about your career aspirations, skill perceptions, educational choices, and views on AI. Should the AI encounter persistent technical issues, the interview may not be able to be completed within this application.
     *   A **short survey** following the interview with some additional questions.
 *   The estimated total time commitment is approximately **30-40 minutes**.
 
 **3. Privacy, Anonymity, API Usage, and Logging:**
 *   Your privacy is protected. No directly identifiable information (like your name, email, or address) will be collected. Your session is identified only by the anonymized User ID: `{username}`.
-*   **AI Interview Data Handling:** To enable the AI assistant to converse with you, your typed responses during the interview will be sent via a secure Application Programming Interface (API) to the AI service provider (OpenAI, for the GPT model used in this study). This is done solely to generate the AI's replies in real-time.
-*   **Data Use by AI Provider:** Based on the current policies of major AI providers like OpenAI for API usage, data submitted through the API is **not used to train their AI models**.
-*   **Research Data:** The research team receives the final survey answers and interview transcript (potentially including both AI and manually answered portions) via secure methods (e.g., Google Sheets with restricted access). During data analysis, this data will be linked to your **anonymized User ID** (`{username}`), not to any other identifier.
+*   **AI Interview Data Handling:** To enable the AI assistant to converse with you, your typed responses during the interview will be sent via a secure Application Programming Interface (API) to the AI service provider (OpenAI or Anthropic, depending on the model used). This is done solely to generate the AI's replies in real-time.
+*   **Data Use by AI Provider:** Based on the current policies of major AI providers like OpenAI and Anthropic for API usage, data submitted through the API is **not used to train their AI models**.
+*   **Research Data:** The research team receives the final survey answers and interview transcript via secure methods (e.g., Google Sheets with restricted access). During data analysis, this data will be linked to your **anonymized User ID** (`{username}`), not to any other identifier.
 *   **Anonymization:** Any potentially identifying details mentioned during the interview (e.g., specific names, unique places) will be **removed or pseudonymized** in the final transcripts used for analysis or publication.
 *   **Persistent Logging (Firestore):** To prevent data loss due to technical issues (e.g., browser crash, network disconnect), your anonymized chat messages are saved to a secure cloud database (Google Cloud Firestore) hosted by Google after each turn. This data is linked only to your anonymized User ID (`{username}`) and is used primarily for data recovery and secondarily for analysis if final submission fails. Key application state (like consent status and current progress stage) is also saved here to allow resuming sessions.
 
@@ -294,6 +297,7 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
     *   **Legal Basis:** Your explicit consent. You can withdraw consent at any time (though data withdrawal post-submission may be limited as explained above).
     *   **Your Rights:** You have the right to access your data; request rectification, deletion, or portability (in certain cases); object to processing; or request limitation. Procedures are described at www.upf.edu/web/proteccio-dades/drets. Contact the DPO (dpd@upf.edu) for queries. If unsatisfied, you may contact the Catalan Data Protection Authority (apdcat.gencat.cat).
     """)
+    # --- End Consent Form Content ---
     consent = st.checkbox("I confirm that I have read and understood the information sheet above, including the information about how the AI interview works and data logging. I am 18 years or older, and I voluntarily consent to participate in this study.", key="consent_checkbox", value=st.session_state.get("consent_given", False))
     if consent != st.session_state.get("consent_given", False):
         st.session_state.consent_given = consent
@@ -307,40 +311,60 @@ if st.session_state.get("current_stage") == WELCOME_STAGE:
 # --- Section 1: Interview Stage ---
 elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
     st.title("Part 1: Interview")
+    # --- Start Time & Active Logic (No Changes) ---
     if st.session_state.start_time is None and "start_time_unix" not in st.session_state.get("loaded_state", {}):
         st.session_state.start_time = time.time(); st.session_state.start_time_file_names = time.strftime("%Y%m%d_%H%M%S", time.localtime(st.session_state.start_time))
         utils.save_interview_state_to_firestore(username, {"start_time_unix": st.session_state.start_time}); print("Start time initialized and saved.")
     if not st.session_state.get("interview_active", False):
          st.session_state.interview_active = True; utils.save_interview_state_to_firestore(username, {"interview_active": True}); print("Interview marked as active.")
+    # --- Quit Button Logic (No Changes) ---
     st.info("Please answer the interviewer's questions.")
     if st.button("Quit Interview Early", key="quit_interview"):
         st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
         quit_message = "You have chosen to end the interview early. Proceeding to the final questions."; quit_msg_dict = {"role": "assistant", "content": quit_message}
         st.session_state.messages.append(quit_msg_dict); utils.save_message_to_firestore(username, quit_msg_dict)
+        # Format transcript up to this point before quitting
         utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
+        # Save state including completion flag and move stage
         utils.save_interview_state_to_firestore(username, {"interview_active": False, "interview_completed_flag": True, "current_stage": SURVEY_STAGE})
         st.warning(quit_message); st.session_state.current_stage = SURVEY_STAGE; print("Moving to Survey Stage after Quit."); time.sleep(1); st.rerun()
+
+    # --- Display Chat History (No Changes) ---
     for message in st.session_state.get("messages", []):
         if message.get('role') == "system": continue;
+        # Exclude closing codes themselves and the messages they trigger
         if message.get('content', '') in config.CLOSING_MESSAGES.keys(): continue
+        is_closing_message_display = any(message.get('content', '') == display_text for code, display_text in config.CLOSING_MESSAGES.items())
+        if is_closing_message_display: continue
         avatar = config.AVATAR_INTERVIEWER if message.get('role') == "assistant" else config.AVATAR_RESPONDENT
         with st.chat_message(message.get('role', 'unknown'), avatar=avatar): st.markdown(message.get('content', ''))
+
+    # --- Initial Assistant Message Logic (MODIFIED Fallback Handling) ---
     if not st.session_state.get("messages", []) or \
        (api == "openai" and len(st.session_state.get("messages", [])) == 1 and st.session_state.get("messages", [])[0].get("role") == "system"):
         print("No previous assistant/user messages found, attempting to get initial message.")
         try:
+            # Ensure system prompt is present for OpenAI
             if api == "openai":
                  if not st.session_state.messages or st.session_state.messages[0].get("role") != "system":
-                     sys_prompt_dict = {"role": "system", "content": config.SYSTEM_PROMPT}; st.session_state.messages.insert(0, sys_prompt_dict)
+                     sys_prompt_dict = {"role": "system", "content": config.SYSTEM_PROMPT}
+                     st.session_state.messages.insert(0, sys_prompt_dict)
+                     utils.save_interview_state_to_firestore(username, {}) # Trigger a save to record the prompt addition potentially
+
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
                 message_placeholder = st.empty(); message_placeholder.markdown("Thinking...")
                 api_messages = []; message_interviewer = ""
+                # Prepare messages for API call
                 if api == "openai":
-                    if st.session_state.messages and st.session_state.messages[0].get("role") == 'system': api_messages = [st.session_state.messages[0]]
-                if api == "anthropic": api_messages = [{"role": "user", "content": "Please begin the interview."}]
+                    if st.session_state.messages and st.session_state.messages[0].get("role") == 'system':
+                         api_messages = [st.session_state.messages[0]] # Only system prompt initially
+                elif api == "anthropic":
+                    api_messages = [{"role": "user", "content": "Please begin the interview."}] # Anthropic needs initial user message
+
                 api_kwargs = { "model": config.MODEL, "messages": api_messages, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": False }
                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT
                 if config.TEMPERATURE is not None: api_kwargs["temperature"] = config.TEMPERATURE
+
                 try:
                     print("Attempting initial API call with retry...")
                     @api_retry_decorator
@@ -353,43 +377,55 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                     elif api == "anthropic": message_interviewer = response.content[0].text
                     print("Initial API call success after retry logic.")
                     message_placeholder.markdown(message_interviewer)
+
+                # --- MODIFIED ERROR HANDLING: No Manual Fallback ---
                 except RETRYABLE_ERRORS as e_retry:
                      print(f"Initial API call failed after retries: {e_retry}")
-                     message_placeholder.error(f"Error connecting to the AI assistant after multiple attempts: {e_retry}. Switching to manual fallback.")
-                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-                     st.session_state.partial_ai_transcript_formatted = st.session_state.pop("current_formatted_transcript_for_gsheet", "ERROR: Partial transcript format failed.")
-                     st.session_state.current_stage = MANUAL_INTERVIEW_STAGE
-                     utils.save_interview_state_to_firestore(username, {"current_stage": MANUAL_INTERVIEW_STAGE, "interview_active": False, "manual_fallback_triggered": True, "partial_ai_transcript_formatted": st.session_state.partial_ai_transcript_formatted})
-                     st.rerun()
+                     message_placeholder.error(f"Error connecting to the AI assistant after multiple attempts: {e_retry}. Your progress is saved. Please try refreshing the page in a few moments. If the problem persists, contact the researcher.")
+                     # Save partial transcript for debugging (optional)
+                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
+                     # DO NOT change stage. DO NOT mark interview complete.
+                     st.stop() # Halt further execution for this run
                 except Exception as e_fatal:
                      print(f"Non-retryable initial API error: {e_fatal}")
-                     message_placeholder.error(f"An unexpected error occurred connecting to the AI assistant: {e_fatal}. Switching to manual fallback.")
-                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-                     st.session_state.partial_ai_transcript_formatted = st.session_state.pop("current_formatted_transcript_for_gsheet", "ERROR: Partial transcript format failed.")
-                     st.session_state.current_stage = MANUAL_INTERVIEW_STAGE
-                     utils.save_interview_state_to_firestore(username, {"current_stage": MANUAL_INTERVIEW_STAGE, "interview_active": False, "manual_fallback_triggered": True, "partial_ai_transcript_formatted": st.session_state.partial_ai_transcript_formatted})
-                     st.rerun()
+                     message_placeholder.error(f"An unexpected error occurred connecting to the AI assistant: {e_fatal}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
+                     # Save partial transcript for debugging (optional)
+                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
+                     # DO NOT change stage. DO NOT mark interview complete.
+                     st.stop() # Halt further execution for this run
+
+            # Save the successful initial message
             assistant_msg_dict = {"role": "assistant", "content": message_interviewer.strip()}
             st.session_state.messages.append(assistant_msg_dict)
             utils.save_message_to_firestore(username, assistant_msg_dict)
             print("Initial message obtained and saved."); time.sleep(0.1); st.rerun()
-        except Exception as e:
+
+        except Exception as e: # Catch potential errors in the setup before API call
             if 'message_placeholder' in locals(): message_placeholder.empty()
-            st.error(f"Failed during initial message setup: {e}"); st.stop()
+            st.error(f"Failed during initial message setup: {e}. Please refresh and try again.");
+            st.stop()
+
+    # --- Chat Input & Response Logic (MODIFIED Fallback Handling) ---
     if prompt := st.chat_input("Your response..."):
         user_msg_dict = {"role": "user", "content": prompt}
         st.session_state.messages.append(user_msg_dict); utils.save_message_to_firestore(username, user_msg_dict)
         with st.chat_message("user", avatar=config.AVATAR_RESPONDENT): st.markdown(prompt)
+
         try:
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
                  message_placeholder = st.empty(); message_placeholder.markdown("Thinking...")
                  message_interviewer = ""; full_response_content = ""; stream_closed = False; detected_code = None
+
+                 # Prepare messages for API call (system prompt handled differently by APIs)
                  if api == "openai": api_messages_for_call = st.session_state.messages
                  elif api == "anthropic": api_messages_for_call = [m for m in st.session_state.messages if m.get("role") != "system"]
+
                  api_kwargs = { "model": config.MODEL, "messages": api_messages_for_call, "max_tokens": config.MAX_OUTPUT_TOKENS, "stream": True }
-                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT
+                 if api == "anthropic": api_kwargs["system"] = config.SYSTEM_PROMPT # Pass system prompt separately for Anthropic
                  if config.TEMPERATURE is not None: api_kwargs["temperature"] = config.TEMPERATURE
+
                  try:
+                    # --- Streaming Logic (OpenAI) ---
                     if api == "openai":
                         stream = openai_client.chat.completions.create(**api_kwargs)
                         for chunk in stream:
@@ -397,125 +433,187 @@ elif st.session_state.get("current_stage") == INTERVIEW_STAGE:
                                  delta = chunk.choices[0].delta
                                  if delta and delta.content:
                                      text_delta = delta.content; full_response_content += text_delta; current_content_stripped = full_response_content.strip()
+                                     # Check for closing code
                                      for code in config.CLOSING_MESSAGES.keys():
-                                         if code == current_content_stripped: detected_code = code; message_interviewer = full_response_content.replace(code, "").strip(); stream_closed = True; break
+                                         if code == current_content_stripped:
+                                             detected_code = code
+                                             message_interviewer = full_response_content.replace(code, "").strip() # Get text before code
+                                             stream_closed = True; break
                                      if stream_closed: break
-                                     message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
-                        if not stream_closed: message_placeholder.markdown(message_interviewer)
+                                     # Update placeholder during stream
+                                     message_interviewer = full_response_content
+                                     message_placeholder.markdown(message_interviewer + "▌")
+                        if not stream_closed: message_placeholder.markdown(message_interviewer) # Final update
+
+                    # --- Streaming Logic (Anthropic) ---
                     elif api == "anthropic":
                          with anthropic_client.messages.stream(**api_kwargs) as stream:
                             for text_delta in stream.text_stream:
                                  if text_delta is not None:
                                      full_response_content += text_delta; current_content_stripped = full_response_content.strip()
+                                     # Check for closing code
                                      for code in config.CLOSING_MESSAGES.keys():
-                                         if code == current_content_stripped: detected_code = code; message_interviewer = full_response_content.replace(code,"").strip(); stream_closed = True; break
+                                         if code == current_content_stripped:
+                                             detected_code = code
+                                             message_interviewer = full_response_content.replace(code,"").strip()
+                                             stream_closed = True; break
                                      if stream_closed: break
-                                     message_interviewer = full_response_content; message_placeholder.markdown(message_interviewer + "▌")
-                         if not stream_closed: message_placeholder.markdown(message_interviewer)
+                                     # Update placeholder during stream
+                                     message_interviewer = full_response_content
+                                     message_placeholder.markdown(message_interviewer + "▌")
+                         if not stream_closed: message_placeholder.markdown(message_interviewer) # Final update
+
+                    # --- Process Response After Stream ---
                     assistant_msg_content = full_response_content.strip()
                     assistant_msg_dict = {"role": "assistant", "content": assistant_msg_content}
-                    if not st.session_state.messages or st.session_state.messages[-1] != assistant_msg_dict:
-                        st.session_state.messages.append(assistant_msg_dict); utils.save_message_to_firestore(username, assistant_msg_dict)
+
+                    # Save assistant message (unless it's just the code)
+                    if not detected_code or message_interviewer: # Save if there's actual content besides the code
+                        # Avoid saving duplicate if stream ended abruptly after last save
+                        if not st.session_state.messages or st.session_state.messages[-1] != assistant_msg_dict:
+                           st.session_state.messages.append(assistant_msg_dict)
+                           utils.save_message_to_firestore(username, assistant_msg_dict)
+
+                    # --- Handle Closing Code ---
                     if detected_code:
                         st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
                         closing_message_display = config.CLOSING_MESSAGES[detected_code]
+
+                        # Display any text *before* the code
                         if message_interviewer: message_placeholder.markdown(message_interviewer)
+                        else: message_placeholder.empty() # Clear "Thinking..." if only code received
+
+                        # Save final transcript data
                         utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
+                        # Save state and move to survey
                         utils.save_interview_state_to_firestore(username, {"interview_active": False, "interview_completed_flag": True, "current_stage": SURVEY_STAGE})
-                        if closing_message_display: st.success(closing_message_display)
-                        st.session_state.current_stage = SURVEY_STAGE; print("Moving to Survey Stage after code detection."); time.sleep(2); st.rerun()
+                        if closing_message_display: st.success(closing_message_display) # Show the nice closing message
+                        st.session_state.current_stage = SURVEY_STAGE
+                        print("Moving to Survey Stage after code detection."); time.sleep(2); st.rerun()
+
+                 # --- MODIFIED ERROR HANDLING: No Manual Fallback ---
                  except RETRYABLE_ERRORS as e_retry:
-                     print(f"API call failed during chat stream after potential retries: {e_retry}")
-                     message_placeholder.error(f"Connection to the AI assistant failed: {e_retry}. Switching to manual fallback.")
-                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-                     st.session_state.partial_ai_transcript_formatted = st.session_state.pop("current_formatted_transcript_for_gsheet", "ERROR: Partial transcript format failed.")
-                     st.session_state.current_stage = MANUAL_INTERVIEW_STAGE
-                     utils.save_interview_state_to_firestore(username, {"current_stage": MANUAL_INTERVIEW_STAGE, "interview_active": False, "manual_fallback_triggered": True, "partial_ai_transcript_formatted": st.session_state.partial_ai_transcript_formatted})
-                     st.rerun()
+                     print(f"API call failed during chat stream after retries: {e_retry}")
+                     message_placeholder.error(f"Connection to the AI assistant failed: {e_retry}. Your progress is saved. Please try refreshing the page in a few moments. If the problem persists, contact the researcher.")
+                     # Save partial transcript for debugging (optional)
+                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
+                     # DO NOT change stage. DO NOT mark interview complete.
+                     st.stop() # Halt further execution for this run
                  except Exception as e_fatal:
                      print(f"Unhandled API error during chat stream: {e_fatal}")
-                     message_placeholder.error(f"An unexpected error occurred: {e_fatal}. Switching to manual fallback.")
-                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-                     st.session_state.partial_ai_transcript_formatted = st.session_state.pop("current_formatted_transcript_for_gsheet", "ERROR: Partial transcript format failed.")
-                     st.session_state.current_stage = MANUAL_INTERVIEW_STAGE
-                     utils.save_interview_state_to_firestore(username, {"current_stage": MANUAL_INTERVIEW_STAGE, "interview_active": False, "manual_fallback_triggered": True, "partial_ai_transcript_formatted": st.session_state.partial_ai_transcript_formatted})
-                     st.rerun()
+                     message_placeholder.error(f"An unexpected error occurred: {e_fatal}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
+                     # Save partial transcript for debugging (optional)
+                     utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
+                     # DO NOT change stage. DO NOT mark interview complete.
+                     st.stop() # Halt further execution for this run
+
+        # --- Catch errors in the broader chat response handling ---
         except Exception as e:
-            if 'message_placeholder' in locals(): message_placeholder.empty()
-            st.error(f"An error occurred: {e}. Switching to manual fallback.")
-            utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.messages)
-            st.session_state.partial_ai_transcript_formatted = st.session_state.pop("current_formatted_transcript_for_gsheet", "ERROR: Partial transcript format failed.")
-            st.session_state.current_stage = MANUAL_INTERVIEW_STAGE
-            utils.save_interview_state_to_firestore(username, {"current_stage": MANUAL_INTERVIEW_STAGE, "interview_active": False, "manual_fallback_triggered": True, "partial_ai_transcript_formatted": st.session_state.partial_ai_transcript_formatted})
-            st.rerun()
+            if 'message_placeholder' in locals(): message_placeholder.empty() # Clear thinking message
+            st.error(f"An error occurred processing the chat response: {e}. Your progress is saved. Please try refreshing the page. If the problem persists, contact the researcher.")
+            # Save partial transcript for debugging (optional)
+            utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=False, messages_to_format=st.session_state.messages)
+            # DO NOT change stage. DO NOT mark interview complete.
+            st.stop() # Halt further execution for this run
 
 
 # --- Section 1.5: Manual Interview Fallback Stage ---
-elif st.session_state.get("current_stage") == MANUAL_INTERVIEW_STAGE:
-    st.title("Part 1: Interview (Manual Fallback)")
-    st.warning("We encountered an issue connecting to the AI interviewer. Please answer the remaining core questions manually below. Your previous answers (if any) have been saved.")
-    last_part_idx = find_last_ai_part_completed(st.session_state.get("messages", []))
-    start_part_idx = last_part_idx + 1
-    print(f"Manual fallback starting from part index: {start_part_idx}")
-    manual_answers = {}; questions_to_ask = []
-    for i in range(start_part_idx, len(part_key_sequence)):
-        part_key = part_key_sequence[i]
-        if part_key in manual_questions_map: questions_to_ask.extend(manual_questions_map[part_key])
-    if not questions_to_ask:
-        st.error("Could not determine which manual questions to ask. Please contact the researcher.")
-        for part_key in part_key_sequence:
-             if part_key in manual_questions_map: questions_to_ask.extend(manual_questions_map[part_key])
-        if not questions_to_ask: st.stop()
-    with st.form("manual_interview_form"):
-        st.markdown("Please provide your answers in the text boxes below.")
-        for q_data in questions_to_ask:
-            manual_answers[q_data["key"]] = st.text_area(q_data["text"], key=f"manual_{q_data['key']}", height=150)
-        manual_submitted = st.form_submit_button("Submit Manual Answers & Proceed to Survey")
-    if manual_submitted:
-        st.info("Processing manual answers...")
-        manual_transcript_parts = ["MANUAL FALLBACK ANSWERS\n---\n"]
-        for q_data in questions_to_ask:
-            answer = manual_answers.get(q_data["key"], "").strip()
-            manual_transcript_parts.append(f"Question: {q_data['text']}\nAnswer: {answer if answer else '[No answer provided]'}\n---")
-        manual_formatted_answers = "\n".join(manual_transcript_parts)
-        st.session_state.manual_answers_formatted = manual_formatted_answers
-        st.session_state.current_formatted_transcript_for_gsheet = st.session_state.get("partial_ai_transcript_formatted", "ERROR: Partial AI transcript missing.")
-        st.session_state.interview_active = False; st.session_state.interview_completed_flag = True
-        utils.save_interview_state_to_firestore(username, { "interview_active": False, "interview_completed_flag": True, "current_stage": SURVEY_STAGE, "manual_fallback_triggered": True, "manual_answers_formatted": manual_formatted_answers })
-        st.session_state.current_stage = SURVEY_STAGE
-        print("Moving to Survey Stage after Manual Fallback submission."); st.rerun()
+# REMOVED ENTIRELY
+
 
 # --- Section 2: Survey Stage ---
 elif st.session_state.get("current_stage") == SURVEY_STAGE:
     st.title("Part 2: Survey")
     st.info(f"Thank you, please answer a few final questions.")
+
+    # --- Transcript Check Logic (Simplified - No Manual Answers) ---
     if "current_formatted_transcript_for_gsheet" not in st.session_state:
-         print("CRITICAL WARNING: Formatted transcript key missing at survey stage entry.")
-         if st.session_state.get("manual_answers_formatted"):
-             st.session_state.current_formatted_transcript_for_gsheet = st.session_state.get("partial_ai_transcript_formatted", "ERROR: Partial AI transcript missing after fallback.")
-         else:
-             print("Attempting last-resort transcript formatting...")
-             utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.get("messages", []))
+         print("WARNING: Formatted transcript key missing at survey stage entry. Attempting generation.")
+         # Attempt last-resort transcript formatting from messages
+         utils.save_interview_data(username=username, transcripts_directory=config.TRANSCRIPTS_DIRECTORY, times_directory=config.TIMES_DIRECTORY, is_final_save=True, messages_to_format=st.session_state.get("messages", []))
+         # Check if it was successfully generated
          if "current_formatted_transcript_for_gsheet" not in st.session_state:
-              st.error("Error: Could not generate or find transcript for saving.")
-              st.session_state.current_formatted_transcript_for_gsheet = "ERROR: Transcript generation/retrieval failed before survey."
-    age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]; gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]; major_options = ["Select...", "Computer Science", "Engineering (Other)", "Business", "Humanities", "Social Sciences", "Natural Sciences", "Arts", "Health Sciences", "Other", "Not Applicable"]; year_options = ["Select...", "1st Year Undergraduate", "2nd Year Undergraduate", "3rd Year Undergraduate", "4th+ Year Undergraduate", "Graduate Student", "Postgraduate/Doctoral", "Not a Student"]; gpa_values = np.round(np.arange(5.0, 10.01, 0.1), 1); gpa_options = ["Select...", "Below 5.0"] + [f"{gpa:.1f}" for gpa in gpa_values] + ["Prefer not to say / Not applicable"]; ai_freq_options = ["Select...", "Frequently (Daily/Weekly)", "Occasionally (Monthly)", "Rarely (Few times a year)", "Never", "Unsure"]
+              st.error("Error: Could not generate the interview transcript for saving.")
+              st.session_state.current_formatted_transcript_for_gsheet = "ERROR: Transcript generation failed before survey."
+              print("CRITICAL ERROR: Transcript generation failed before survey.")
+
+    # --- UPDATED Survey Options ---
+    age_options = ["Select...", "Under 18"] + [str(i) for i in range(18, 36)] + ["Older than 35"]
+    gender_options = ["Select...", "Male", "Female", "Non-binary", "Prefer not to say"]
+    major_options = [
+        "Select...",
+        "Business Management and Administration",
+        "Economics",
+        "Business Sciences - Management",
+        "International Business Economics",
+        "Double Degree in Law-ECO/ADE",
+        "Industrial Technologies and Economic Analysis",
+        "Other"
+    ]
+    year_options = [
+        "Select...",
+        "First Year",
+        "Second Year",
+        "Third Year",
+        "Fourth Year",
+        "Fifth Year",
+        "Other/Not Applicable"
+    ]
+    gpa_values = np.round(np.arange(5.0, 10.01, 0.1), 1)
+    gpa_options = ["Select...", "Below 5.0"] + [f"{gpa:.1f}" for gpa in gpa_values] + ["Prefer not to say / Not applicable"]
+
     with st.form("survey_form"):
-        st.subheader("Demographic Information"); age = st.selectbox("Age?", age_options, key="age"); gender = st.selectbox("Gender?", gender_options, key="gender"); major = st.selectbox("Major/Field?", major_options, key="major"); year_of_study = st.selectbox("Year?", year_options, key="year"); gpa = st.selectbox("GPA?", gpa_options, key="gpa")
-        st.subheader("AI Usage"); ai_frequency = st.selectbox("AI Use Frequency?", ai_freq_options, key="ai_frequency"); ai_model = st.text_input("AI Model(s) Used?", key="ai_model")
+        st.subheader("Demographic Information")
+        # --- UPDATED Question Wording ---
+        age = st.selectbox("What is your age?", age_options, key="age")
+        gender = st.selectbox("What is your gender?", gender_options, key="gender")
+        major = st.selectbox("What is your main field of study (or double degree)?", major_options, key="major")
+        year_of_study = st.selectbox("What year of study are you currently in?", year_options, key="year")
+        gpa = st.selectbox("What is your approximate GPA or academic average (on a scale of 10)?", gpa_options, key="gpa")
+
+        st.subheader("AI Usage")
+        # --- NEW Slider for AI Usage ---
+        ai_usage_percentage_value = st.slider(
+            "How much are you using AI for your university work?",
+            min_value=0,
+            max_value=100,
+            value=50, # Default value in the middle
+            key="ai_usage_slider",
+            help="Estimate the percentage of your university tasks where you utilize AI tools. 0 = Not at all, 100 = For almost all tasks."
+        )
+        # --- UPDATED Question Wording & REMOVED Placeholder ---
+        ai_model = st.text_input("Which AI model are you mostly using?", key="ai_model") # Placeholder removed
+
         submitted = st.form_submit_button("Submit Survey Responses")
+
     if submitted:
-        if (age == "Select..." or gender == "Select..." or major == "Select..." or year_of_study == "Select..." or gpa == "Select..." or ai_frequency == "Select..."):
+        # Validation
+        if (age == "Select..." or gender == "Select..." or major == "Select..." or year_of_study == "Select..." or gpa == "Select..."):
             st.warning("Please answer all dropdown questions.")
         else:
-            survey_responses = {"age": age, "gender": gender, "major": major, "year": year_of_study, "gpa": gpa, "ai_frequency": ai_frequency, "ai_model": ai_model}
+            # --- Capture slider value ---
+            survey_responses = {
+                "age": age,
+                "gender": gender,
+                "major": major,
+                "year": year_of_study,
+                "gpa": gpa,
+                "ai_usage_percentage": ai_usage_percentage_value, # Store slider value
+                "ai_model": ai_model
+            }
+            # --- Pass survey_responses dict to saving functions ---
+            # save_survey_data now handles GSheet & Firestore backup (without manual answers)
             save_successful = utils.save_survey_data(username, survey_responses)
+
             if save_successful:
                 st.session_state.survey_completed_flag = True; st.session_state.current_stage = COMPLETED_STAGE
+                # Final state update confirming completion
                 utils.save_interview_state_to_firestore(username, {"current_stage": COMPLETED_STAGE, "survey_completed_flag": True})
                 st.success("Survey submitted! Thank you."); st.balloons(); time.sleep(3); st.rerun()
             else:
-                st.warning("Could not save to Google Sheets. Your responses may have been saved to our backup system. Please try submitting again or contact the researcher.")
+                 # Error message improved to reflect primary (GSheet) vs backup (Firestore)
+                st.warning("Could not save survey results to primary storage (Google Sheets). Your responses may have been saved to our backup system. Please contact the researcher.")
+
 
 # --- Section 3: Completed Stage ---
 elif st.session_state.get("current_stage") == COMPLETED_STAGE:
@@ -524,14 +622,18 @@ elif st.session_state.get("current_stage") == COMPLETED_STAGE:
         st.success("You have completed the interview and the survey. Your contribution is greatly appreciated!")
         st.markdown("You may now close this window.")
     else:
-        st.warning("Navigated to completion page, but survey completion status not confirmed.")
+        # This case should be less likely now, but kept as a safeguard
+        st.warning("Navigated to completion page, but survey completion status is not confirmed in the session.")
         st.markdown("If you believe this is an error, please contact the researcher.")
 
 
 # --- Fallback / Initializing ---
 else:
+    # This handles unexpected state values or initialization issues
     st.spinner("Loading application state...")
     print(f"Info: Fallback/Loading state. User: {username}, Stage: {st.session_state.get('current_stage')}, Initialized: {st.session_state.get('session_initialized')}")
     time.sleep(1.0)
-    if username and st.session_state.get("session_initialized"): determine_current_stage(username)
-    st.rerun()
+    # Attempt to re-determine stage if possible
+    if username and st.session_state.get("session_initialized"):
+        determine_current_stage(username)
+    st.rerun() # Attempt to re-render with potentially corrected state

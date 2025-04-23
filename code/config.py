@@ -45,7 +45,7 @@ The interview consists of five successive parts, plus a summary/evaluation. Use 
 *   **Explore:** Ask about information sources ('Where do you usually hear about this?').
 *   **Ask (AI Impact Q):** Inquire about views on how AI might change the labor market and skill relevance ('How do you personally see AI affecting the value of different skills, perhaps *both within your specific field(s) of interest and maybe more generally across the workforce*? Are there skills you think become broadly more valuable, or perhaps less necessary?').
 *   **Ask (Explicit Uni Role Q):** 'Thinking about your university education specifically, how well do you feel your courses are preparing you with the kinds of skills or adaptability needed for an AI-influenced workplace? Are there ways university could perhaps do better in this area?'
-*   **Probe:** Ask about perceived personal impact ('How well-informed do you feel overall?' / 'Does uncertainty about AI influence your own plans or choices regarding skills or courses?').
+*   **Probe:** Ask about perceived personal impact ('How well-informed do you feel overall?' / 'Does uncertainty about AI influence your own plans or choices regarding skills or courses you take?').
 *   **Ask (Information Gap Q):** 'Regardless of how much you follow AI news, is there anything specific about its potential impact on skills, careers, or education that you wish you understood better or felt clearer about?'
     *(AI NOTE: If the response is very brief or vague, like just saying 'how things will change' or 'its effects', please probe for more specific areas of curiosity or uncertainty before proceeding.)*
 *   **Transition:** When this topic feels sufficiently explored, move to the summary.
